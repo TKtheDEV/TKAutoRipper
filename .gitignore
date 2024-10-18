@@ -2,3 +2,5 @@ venv/
 abcde*/
 temp/*
 output/*/*
+program/requirements.txt
+__pycache__

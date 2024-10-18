@@ -1,11 +1,16 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, Blueprint
+from flask_socketio import SocketIO, emit
 
-app = Flask(__name__)
+# Create a blueprint
+bp = Blueprint('web_ui', __name__)
 
-@app.route('/')
-def home():
-    return "TKAutoRipper Web UI - Status Page Coming Soon!"
+# Initialize SocketIO with the main app not yet assigned
+socketio = SocketIO()
 
-def start_web_ui():
-    # Start the Flask web server
-    app.run(debug=True, use_reloader=False, port=5000)
+@bp.route('/')
+def index():
+    return render_template('index.html')
+
+@socketio.on('connect')
+def on_connect():
+    emit('status', {'data': 'Connected'})

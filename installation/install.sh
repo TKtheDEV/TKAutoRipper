@@ -16,7 +16,7 @@ git clone https://github.com/TKtheDEV/TKAutoRipper.git ~/TKAutoRipper || error_e
 
 # Set up directories
 echo -e "\nSetting up directory structure..."
-mkdir -p ~/TKAutoRipper/temp ~/TKAutoRipper/output/CD ~/TKAutoRipper/output/DVD ~/TKAutoRipper/output/BLURAY
+mkdir -p ~/TKAutoRipper/temp/CD ~/TKAutoRipper/output/CD ~/TKAutoRipper/output/DVD ~/TKAutoRipper/output/BLURAY
 
 # Set up Python virtual environment
 echo -e "\nSetting up Python environment..."
@@ -25,8 +25,7 @@ python3 -m venv venv
 source venv/bin/activate
 echo "# Activate TKAutoRipper environment" >> ~/.bashrc
 echo "source ~/TKAutoRipper/program/venv/bin/activate" >> ~/.bashrc
-pip install flask
-echo "flask" > requirements.txt  # Move this to the appropriate directory if needed
+pip install -r requirements.txt
 
 # Check for MakeMKV installation
 if ! command -v makemkvcon &> /dev/null; then

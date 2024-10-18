@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TKAutoRipper Status</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>TKAutoRipper Status</h1>
+
+    <h2>Drives Status</h2>
+    <ul>
+        {% for drive in drives %}
+            <li>{{ drive }} - Status: {{ drive_status[drive] }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Current Ripping Task</h2>
+    <p>{{ ripping_status }}</p>
+
+</body>
+</html>
