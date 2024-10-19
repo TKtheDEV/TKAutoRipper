@@ -2,22 +2,120 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TKAutoRipper Status</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="/static/style.css">
+    <title>Disc Ripping Status</title>
 </head>
 <body>
-    <h1>TKAutoRipper Status</h1>
+    <h1>System Information</h1>
+    <div class="status-box" id="system-info"></div>
 
-    <h2>Drives Status</h2>
-    <ul>
-        {% for drive in drives %}
-            <li>{{ drive }} - Status: {{ drive_status[drive] }}</li>
-        {% endfor %}
-    </ul>
+    <h1>Drive Status</h1>
+    <div id="drives"></div>
 
-    <h2>Current Ripping Task</h2>
-    <p>{{ ripping_status }}</p>
+    <script>
+        // Fetch System Info
+        async function fetchSystemInfo() {
+            try {
+                const response = await fetch('/system-info');
+                if (!response.ok) throw new Error("Failed to fetch system info");
+                
+                const data = await response.json();
+                const systemInfoDiv = document.getElementById('system-info');
 
+                systemInfoDiv.innerHTML = `
+                    <p>OS: ${data.OS}</p>
+                    <p>Kernel: ${data.Kernel}</p>
+                    <p>Disk Available: ${data["Disk Available"]}</p>
+                    <p>RAM Available: ${data["RAM Available"]}</p>
+                    <p>Uptime: ${data.Uptime}</p>
+                    <p>CPU Temp: ${data["CPU Temp"]}</p>
+                    <p>GPU Temp: ${data.GPUs[0].temperature}°C</p>
+                `;
+            } catch (error) {
+                console.error(error.message);
+            }
+        }
+
+        // Fetch Drives Info
+        async function fetchDrives() {
+            try {
+                const response = await fetch('/drives');
+                if (!response.ok) throw new Error("Failed to fetch drives");
+
+                const data = await response.json();
+                const drivesDiv = document.getElementById('drives');
+                drivesDiv.innerHTML = '';  // Clear existing content
+
+                data.forEach((drive) => {
+                    let driveId = drive.drive.split('/').pop();  // Get just the drive ID (e.g., "sr0")
+                    let status = drive.status;
+                    let jobId = drive.job_id ? `Job ID: ${drive.job_id}` : "";
+                    let startTime = drive.start_time ? `Start Time: ${drive.start_time}` : "";
+
+                    // Add each drive's status and buttons for controls
+                    drivesDiv.innerHTML += `
+                        <div class="drive-box">
+                            <h2>${driveId}</h2>
+                            <p>Path: ${drive.drive}</p>
+                            <p>Status: ${status}</p>
+                            <p>${jobId}</p>
+                            <p>${startTime}</p>
+                            ${status === "Idle" ? `<button onclick="startCDRipping('${driveId}')">Start Ripping CD</button>` : ""}
+                            ${status !== "Idle" ? `<button onclick="stopJob('${driveId}')">Stop Ripping</button>` : ""}
+                            <button onclick="ejectDrive('${driveId}')">Eject Drive</button>
+                            <a href="/drive-details/${driveId}">View Details</a> <!-- Link to drive details page -->
+                        </div>
+                    `;
+                });
+            } catch (error) {
+                console.error(error.message);
+            }
+        }
+
+        // Start CD Ripping
+        async function startCDRipping(drive) {
+            try {
+                const response = await fetch(`/rip-cd/${drive}`, { method: 'POST' });
+                if (!response.ok) throw new Error("Failed to start ripping");
+                fetchDrives();  // Refresh the drive status after starting a job
+            } catch (error) {
+                console.error(error.message);
+            }
+        }
+
+        // Stop Job
+        async function stopJob(drive) {
+            try {
+                const response = await fetch(`/stop-job/${drive}`, { method: 'POST' });
+                if (!response.ok) throw new Error("Failed to stop job");
+                fetchDrives();  // Refresh the drive status after stopping a job
+            } catch (error) {
+                console.error(error.message);
+            }
+        }
+
+        // Eject Drive
+        async function ejectDrive(drive) {
+            try {
+                const response = await fetch(`/eject/${drive}`, { method: 'POST' });
+                if (!response.ok) throw new Error("Failed to eject drive");
+                fetchDrives();  // Refresh the drive status after ejecting the drive
+            } catch (error) {
+                console.error(error.message);
+            }
+        }
+
+        // Periodically refresh system info and drives
+        setInterval(() => {
+            fetchSystemInfo();
+            fetchDrives();
+        }, 5000);
+
+        // Initial load
+        fetchSystemInfo();
+        fetchDrives();
+    </script>
 </body>
 </html>

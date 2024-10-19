@@ -1,0 +1,6 @@
+flask
+fastapi
+uvicorn
+psutil
+gputil
+setuptools
