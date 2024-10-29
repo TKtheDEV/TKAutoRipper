@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Settings</title>
+</head>
+<body>
+    <h1>Settings</h1>
+    <div id="settings-form">
+        <form id="config-form">
+            <!-- Dynamically generated configuration fields will go here -->
+        </form>
+        <button onclick="validateLicense()">Check License Key</button>
+        <div id="license-status"></div>
+    </div>
+
+    <script>
+        // Load settings on page load
+        async function loadSettings() {
+            const response = await fetch("/api/settings");
+            const settings = await response.json();
+            
+            const form = document.getElementById("config-form");
+            for (const [section, options] of Object.entries(settings)) {
+                const sectionDiv = document.createElement("div");
+                sectionDiv.innerHTML = `<h3>${section}</h3>`;
+                
+                for (const [option, value] of Object.entries(options)) {
+                    const field = document.createElement("div");
+                    field.innerHTML = `
+                        <label>${option}</label>
+                        <input type="text" name="${section}.${option}" value="${value}" onchange="updateSetting('${section}', '${option}', this.value)">
+                    `;
+                    sectionDiv.appendChild(field);
+                }
+                
+                form.appendChild(sectionDiv);
+            }
+        }
+
+        // Update setting
+        async function updateSetting(section, option, value) {
+            const response = await fetch("/api/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ section, option, value })
+            });
+            if (response.ok) {
+                alert("Configuration updated.");
+            } else {
+                alert("Failed to update configuration.");
+            }
+        }
+
+        // Validate license key
+        async function validateLicense() {
+            const response = await fetch("/api/license-check");
+            const result = await response.json();
+            document.getElementById("license-status").innerText = result.is_valid 
+                ? "License key is valid."
+                : "Invalid license key.";
+        }
+
+        // Load settings when the page loads
+        window.onload = loadSettings;
+    </script>
+</body>
+</html>
