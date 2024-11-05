@@ -8,7 +8,7 @@ error_exit() {
 
 # Install system dependencies
 echo -e "\nInstalling system dependencies..."
-sudo apt update && sudo apt install -y abcde flac handbrake-cli python3 python3-venv || error_exit "Failed to install dependencies!"
+sudo apt update && sudo apt install -y abcde flac git handbrake-cli python3 python3-venv || error_exit "Failed to install dependencies!"
 
 # Clone the repository
 echo -e "\nCloning the TKAutoRipper repository..."
