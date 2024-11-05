@@ -1,6 +1,7 @@
 import configparser
 import logging
 import os
+import subprocess
 
 class ConfigLoader:
     _cached_config = None  # Static variable for caching config in memory
@@ -56,3 +57,41 @@ class ConfigLoader:
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
             logging.error(f"Missing CD configuration option: {e}")
             raise
+
+
+
+def check_hardware_encoders():
+    """Check if NVENC, QSV, or VCE hardware encoders are available in HandBrake."""
+    try:
+        # Run HandBrakeCLI help command and capture the output
+        result = subprocess.run(["HandBrakeCLI", "-h"], capture_output=True, text=True)
+        output = result.stdout.splitlines()
+
+        # Match lines that contain 'nvenc_', 'qsv_', or 'vce_' as a substring
+        encoders = {
+            "nvenc": [line.strip() for line in output if "nvenc_" in line],
+            "qsv": [line.strip() for line in output if "qsv_" in line],
+            "vce": [line.strip() for line in output if "vce_" in line],
+        }
+        
+        # Determine if each encoder type is supported based on the presence of matching lines
+        encoder_status = {
+            "nvenc_supported": bool(encoders["nvenc"]),
+            "qsv_supported": bool(encoders["qsv"]),
+            "vce_supported": bool(encoders["vce"]),
+            "encoders": encoders,
+        }
+
+        return encoder_status
+    except subprocess.CalledProcessError:
+        # Return empty results if an error occurs (e.g., if HandBrakeCLI isn't installed)
+        return {
+            "nvenc_supported": False,
+            "qsv_supported": False,
+            "vce_supported": False,
+            "encoders": {
+                "nvenc": [],
+                "qsv": [],
+                "vce": []
+            }
+        }

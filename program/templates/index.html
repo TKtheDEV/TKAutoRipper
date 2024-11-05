@@ -3,18 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Disc Ripping Status</title>
+    <title>Disc Ripping Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>System Information</h1>
-    <div class="status-box" id="system-info"></div>
+    <header>
+        <h1>Disc Ripping Dashboard</h1>
+    </header>
 
-    <h1>Drive Status</h1>
-    <div id="drives"></div>
+    <section id="system-info-section">
+        <h2>System Information</h2>
+        <div id="system-info" class="status-box">Loading system info...</div>
+        <div id="encoder-status" class="status-box">
+            <h3>Hardware Encoders</h3>
+            <table class="encoder-table">
+                <thead>
+                    <tr>
+                        <th>Encoder Type</th>
+                        <th>Supported</th>
+                        <th>Codecs</th>
+                    </tr>
+                </thead>
+                <tbody id="encoder-table-body">
+                    <!-- JavaScript will populate this table -->
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="drive-status-section">
+        <h2>Drive Status</h2>
+        <div id="drives" class="drive-container">Loading drives...</div>
+    </section>
 
     <script>
-        // Fetch System Info
+        // Centralized error handler
+        function handleError(error) {
+            console.error(error);
+            alert("An error occurred: " + error.message);
+        }
+
+        // Function to fetch and display system info
         async function fetchSystemInfo() {
             try {
                 const response = await fetch('/system-info');
@@ -29,14 +58,14 @@
                     <p>RAM Available: ${data["RAM Available"]}</p>
                     <p>Uptime: ${data.Uptime}</p>
                     <p>CPU Temp: ${data["CPU Temp"]}</p>
-                    <p>GPU Temp: ${data["GPU Temp"]}</p>
+                    <p>GPU Temp: ${data["GPU Temp"]}°C</p>
                 `;
             } catch (error) {
-                console.error("Error fetching system info:", error);
+                handleError(error);
             }
         }
 
-        // Fetch Drives Info
+        // Function to fetch and display drive info
         async function fetchDrives() {
             try {
                 const response = await fetch('/drives');
@@ -46,86 +75,115 @@
                 const drivesDiv = document.getElementById('drives');
                 drivesDiv.innerHTML = '';  // Clear existing content
 
-                data.forEach((drive) => {
-                    const driveId = drive.drive.split('/').pop();  // Get just the drive ID (e.g., "sr0")
-                    let status = drive.status;
-                    let jobId = drive.job_id ? `Job ID: ${drive.job_id}` : "";
-                    let startTime = drive.start_time ? `Start Time: ${drive.start_time}` : "";
-
-                    // Add each drive's status and buttons for controls
-                    drivesDiv.innerHTML += `
+                data.forEach(drive => {
+                    const driveId = drive.drive.split('/').pop();
+                    const driveHTML = `
                         <div class="drive-box">
-                            <h2>${driveId}</h2>
-                            <p>Path: ${drive.drive}</p>
-                            <p>Status: ${status}</p>
-                            <p>${jobId}</p>
-                            <p>${startTime}</p>
-                            ${status === "Idle" ? `<button onclick="startCDRipping('${driveId}')">Start Ripping CD</button>` : ""}
-                            ${status !== "Idle" ? `<button onclick="stopJob('${driveId}')">Stop Ripping</button>` : ""}
-                            <button onclick="ejectDrive('${driveId}')">Eject Drive</button>
+                            <h3>Drive: ${driveId}</h3>
+                            <p>Status: ${drive.status}</p>
+                            <p>${drive.job_id ? `Job ID: ${drive.job_id}` : ""}</p>
+                            <p>${drive.start_time ? `Start Time: ${drive.start_time}` : ""}</p>
+                            ${drive.status === "Idle" ? `<button onclick="startJob('${driveId}', 'cd')">Rip CD</button>` : ""}
+                            ${drive.status === "Idle" ? `<button onclick="startJob('${driveId}', 'bluray')">Rip Blu-ray</button>` : ""}
+                            ${drive.status !== "Idle" ? `<button onclick="stopJob('${driveId}')">Stop</button>` : ""}
+                            <button onclick="ejectDrive('${driveId}')">Eject</button>
                             <a href="/drive-details/${driveId}">View Details</a>
                         </div>
                     `;
+                    drivesDiv.insertAdjacentHTML('beforeend', driveHTML);
                 });
             } catch (error) {
-                console.error("Error fetching drives:", error);
+                handleError(error);
             }
         }
 
-        // Start CD Ripping
-        async function startCDRipping(drive) {
+
+        async function fetchEncoderStatus() {
             try {
-                console.log(`Starting CD ripping for drive: ${drive}`);
-                
-                const response = await fetch(`/start-job/${drive}`, { method: 'POST' });
-                
-                if (!response.ok) {
-                    throw new Error("Failed to start ripping");
-                }
-                
-                const data = await response.json();
-                console.log("Ripping started response:", data);
+                const response = await fetch('/hardware-encoder-status');
+                if (!response.ok) throw new Error("Failed to fetch encoder status");
 
-                fetchDrives();  // Refresh the drive status after starting a job
+                const data = await response.json();
+                const encoderTableBody = document.getElementById('encoder-table-body');
+
+                // Define checkmark and cross symbols
+                const checkmark = "&#10003;"; // ✓ symbol
+                const cross = "&#10007;";     // ✗ symbol
+
+                // Populate the table with encoder information
+                encoderTableBody.innerHTML = `
+                    <tr>
+                        <td>AMD VCE</td>
+                        <td>${data.vce_supported ? checkmark : cross}</td>
+                        <td>${data.encoders.vce.length > 0 ? data.encoders.vce.join(', ') : "No codecs detected"}</td>
+                    </tr>
+                    <tr>
+                        <td>Intel QSV</td>
+                        <td>${data.qsv_supported ? checkmark : cross}</td>
+                        <td>${data.encoders.qsv.length > 0 ? data.encoders.qsv.join(', ') : "No codecs detected"}</td>
+                    </tr>
+                    <tr>
+                        <td>nVIDIA nVENC</td>
+                        <td>${data.nvenc_supported ? checkmark : cross}</td>
+                        <td>${data.encoders.nvenc.length > 0 ? data.encoders.nvenc.join(', ') : "No codecs detected"}</td>
+                    </tr>
+                `;
             } catch (error) {
-                console.error("Error starting CD ripping:", error);
+                console.error("Error fetching hardware encoder status:", error);
+                document.getElementById('encoder-status').innerHTML = `<p>Error checking encoder support</p>`;
             }
         }
 
+        // Function to start ripping jobs
+        async function startJob(drive, type) {
+            const endpoint = type === 'cd' ? `/start-job/${drive}` : `/rip-bluray/${drive}`;
+            try {
+                const response = await fetch(endpoint, { method: 'POST' });
+                if (!response.ok) throw new Error(`Failed to start ${type} job`);
 
-        // Stop Job
+                const data = await response.json();
+                console.log(`${type} ripping started:`, data);
+                fetchDrives();  // Refresh drives after starting a job
+            } catch (error) {
+                handleError(error);
+            }
+        }
+
+        // Function to stop a job
         async function stopJob(drive) {
             try {
                 const response = await fetch(`/stop-job/${drive}`, { method: 'POST' });
                 if (!response.ok) throw new Error("Failed to stop job");
 
-                console.log("Ripping stopped for drive", drive);
-                fetchDrives();  // Refresh the drive status after stopping a job
+                console.log(`Ripping stopped for drive ${drive}`);
+                fetchDrives();  // Refresh drives after stopping a job
             } catch (error) {
-                console.error("Error stopping job:", error);
+                handleError(error);
             }
         }
 
-        // Eject Drive
+        // Function to eject a drive
         async function ejectDrive(drive) {
             try {
                 const response = await fetch(`/eject/${drive}`, { method: 'POST' });
                 if (!response.ok) throw new Error("Failed to eject drive");
 
-                console.log("Drive ejected:", drive);
-                fetchDrives();  // Refresh the drive status after ejecting the drive
+                console.log(`Drive ${drive} ejected`);
+                fetchDrives();  // Refresh drives after ejecting
             } catch (error) {
-                console.error("Error ejecting drive:", error);
+                handleError(error);
             }
         }
 
-        // Periodically refresh system info and drives
-        setInterval(fetchSystemInfo, 10000);  // Update every 10 seconds
+        // Refresh system info and drive status at intervals
+        setInterval(fetchSystemInfo, 30000);  // Update every 30 seconds
         setInterval(fetchDrives, 10000);      // Update every 10 seconds
+        setInterval(fetchEncoderStatus, 30000);  // Update every 30 seconds
 
         // Initial load
         fetchSystemInfo();
         fetchDrives();
+        fetchEncoderStatus();
     </script>
 </body>
 </html>

@@ -10,7 +10,9 @@ import os
 import psutil
 import subprocess
 
+from utils import check_hardware_encoders
 from cd import CDRipper
+from bluray import BluRayRipper
 from detect_drives import get_connected_drives
 from job_tracker import job_tracker
 from utils import ConfigLoader
@@ -68,6 +70,25 @@ def get_os_info():
         os_info["NAME"] = "Unknown OS"
         os_info["VERSION"] = ""
     return f"{os_info.get('NAME', 'Unknown OS')} {os_info.get('VERSION', '')}"
+
+
+@app.post("/rip-bluray/{drive}")
+async def rip_bluray(drive: str, background_tasks: BackgroundTasks):
+    job_id = len(job_tracker.get_jobs()) + 1
+    job_tracker.add_job(drive, job_id, "Ripping Blu-ray in progress")
+    # Start the ripping process in the background
+    background_tasks.add_task(run_bluray_ripping, drive, job_tracker)
+    return {"status": "Ripping Blu-ray started", "job_id": job_id}
+
+def run_bluray_ripping(drive, job_tracker):
+    """Run the Blu-ray ripping and encoding process in the background."""
+    bluray_ripper = BluRayRipper(drive=drive, config_file="~/TKAutoRipper/config/TKAutoRipper.conf", job_tracker=job_tracker)
+    
+    # Rip the Blu-ray
+    bluray_ripper.rip_bluray()
+    
+    # Encode the Blu-ray
+    bluray_ripper.encode_bluray(preset_file="~/TKAutoRipper/config/HandBrake1080pAV1nVENC.json")
 
 @app.get("/system-info")
 async def system_info():
@@ -136,6 +157,12 @@ async def get_drives():
 
     return drive_status
 
+@app.get("/hardware-encoder-status")
+async def hardware_encoder_status():
+    """Endpoint to check if NVENC, QSV, or VCE hardware encoders are available."""
+    encoder_status = check_hardware_encoders()
+    return encoder_status
+
 @app.get("/jobs")
 async def get_jobs():
     return job_tracker.get_jobs()
@@ -193,8 +220,9 @@ async def drive_details(request: Request, drive: str):
 
 @app.get("/api/license-check", response_model=LicenseCheckResponse)
 async def check_license():
-    license_key = config['MakeMKVLicenseKey']
+    license_key = config.get('MakeMKVLicenseKey', None)
     if not license_key:
+        logging.error("License key not found in configuration.")
         raise HTTPException(status_code=400, detail="License key not found in configuration.")
     
     try:
@@ -204,6 +232,7 @@ async def check_license():
     except subprocess.CalledProcessError as e:
         logging.error("Invalid MakeMKV license key: %s", e.stderr.decode())
         return LicenseCheckResponse(is_valid=False, message="Invalid MakeMKV license key.")
+
 
 @app.get("/api/settings")
 async def get_settings():
