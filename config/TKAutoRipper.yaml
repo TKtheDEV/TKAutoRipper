@@ -1,0 +1,177 @@
+General:
+  makemkvlicensekey:
+    description: License key for MakeMKV
+    type: string
+    value: null
+
+  omdbapikey:
+    description: API key for OMDb metadata lookup
+    type: string
+    value: null
+
+  outputdirectory:
+    description: Base output directory
+    type: path
+    value: ~/TKAutoRipper/output
+
+  tempdirectory:
+    description: Temporary working directory for jobs
+    type: path
+    value: ~/TKAutoRipper/temp
+
+auth:
+  username:
+    description: Login username
+    type: string
+    value: admin
+
+  password:
+    description: Login password
+    type: string
+    value: admin
+
+CD:
+  additionaloptions:
+    description: Extra flags to pass to abcde
+    type: string
+    value: -x
+
+  configpath:
+    description: Path to abcde config
+    type: path
+    value: ~/TKAutoRipper/config/abcde.conf
+
+  outputdirectory:
+    description: Managed through abcde.conf OUTPUTDIR
+    type: none
+    value: null
+
+  outputformat:
+    choices:
+    description: Audio output format
+    - flac
+    - aiff
+    - ape
+    - ogg
+    - opus
+    - m4a
+    - mka
+    - mp3
+    - mpc
+    - spx
+    - vorbis
+    - wav
+    - wv
+    type: select
+    value: flac
+
+  tempdirectory:
+    description: Managed through abcde.conf WAVOUTPUTDIR
+    type: none
+    value: null
+
+DVD:
+  handbrakeformat:
+    description: Container format
+    choices:
+    - mkv
+    type: select
+    value: mkv
+
+  handbrakepreset_name:
+    description: HandBrake preset name
+    type: string
+    value: TKAR
+
+  handbrakepreset_path:
+    description: Path to HandBrake preset JSON
+    type: path
+    value: ~/TKAutoRipper/config/TKAR.json
+
+  outputdirectory:
+    description: DVD output directory
+    type: path
+    value: ~/TKAutoRipper/output/DVD
+
+  usehandbrake:
+    description: Enable HandBrake for DVD encoding
+    type: boolean
+    value: true
+
+BLURAY:
+  handbrakeformat:
+    description: Container format
+    choices:
+    - mkv
+    type: select
+    value: mkv
+
+  handbrakepreset_name:
+    description: HandBrake preset name
+    type: string
+    value: TKAR
+
+  handbrakepreset_path:
+    description: Path to HandBrake preset JSON
+    type: path
+    value: ~/TKAutoRipper/config/TKAR.json
+
+  outputdirectory:
+    description: Blu-ray output directory
+    type: path
+    value: ~/TKAutoRipper/output/BLURAY
+
+  usehandbrake:
+    description: Enable HandBrake for Blu-ray encoding
+    type: boolean
+    value: true
+
+OTHER:
+  compression:
+    description: Compression algorithm
+    choices:
+    - zstd
+    - bz2
+    - none
+    type: select
+    value: zstd
+
+  outputdirectory:
+    description: Where to store ripped ISO or raw data
+    type: path
+    value: ~/TKAutoRipper/output/ISO
+
+  usecompression:
+    description: Enable lossless compression for the created ISOs
+    type: boolean
+    value: true
+
+Drives:
+  blacklist:
+    description: List of drive device paths to ignore
+    type: list
+    value:
+    - /dev/sr4
+    - /dev/sr2
+
+Logging:
+  logdirectory:
+    description: Directory for application logs
+    type: path
+    value: /var/log/TKAutoRipper
+  loglevel:
+    description: Log verbosity (DEBUG, INFO, WARN, ERROR)
+    choices:
+    - ERROR
+    - WARN
+    - INFO
+    - DEBUG
+    type: select
+    value: INFO
+
+Advanced:
+  HandbrakeFlatpak:
+    description: 'Set to false when using a native installation of HandBrake on Linux
+      (not recommended by HandBrake: https://handbrake.fr/docs/en/latest/get-handbrake/where-to-get-handbrake.html)'
+    type: boolean
+    value: true

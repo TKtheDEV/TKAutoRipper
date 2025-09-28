@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Job {{ job.job_id }} – TKAutoRipper</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/gif" href="/static/favicon.gif">
+  <script src="/static/job_details.js" defer></script>
+  <script src="/static/toast.js" defer></script>
+
+  <!-- keep dark/light theme consistent -->
+  <script>
+    const getCookie = n => (document.cookie.match('(^| )' + n + '=([^;]+)') || [])[2];
+    document.documentElement.classList.add((getCookie('theme') || 'light') + '-mode');
+  </script>
+
+  <style>
+    /* page-specific tweaks */
+    .log-panel {
+      height: 45vh;
+      overflow: auto;
+      background: var(--log-bg, #111);
+      padding: .5rem;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px #444;
+      white-space: pre-wrap;    /* soft-wrap */
+      font-family: monospace;
+      font-size: .85rem;
+    }
+    /* light / dark override via CSS variables */
+    html.light-mode { --log-bg:#f3f3f3; }
+    html.dark-mode  { --log-bg:#1c1c1c; }
+  </style>
+</head>
+<body>
+</head>
+<body data-job-id="{{ job.job_id }}">
+  <!-- 🔔 Toast Container -->
+  <div id="toast"></div>
+
+  <header class="header-bar" role="banner" aria-label="Job Header">
+    <div class="title-left">
+      <a href="/" style="color:white;">⬅️ Back</a>
+      <h1 style="margin-left:1rem;">Job {{ job.job_id }}</h1>
+    </div>
+    <div class="title-right">
+      <span id="theme-icon" class="theme-symbol" onclick="toggleTheme()">☀️</span>
+      <a href="/" title="Home" class="icon-link">🏠</a>
+    </div>
+  </header>
+
+  <main class="content" role="main">
+    <div class="tile" id="job-meta">
+      <h2>Job Info</h2>
+      <p><strong>Disc:</strong> {{ job.disc_label }} ({{ job.disc_type }})</p>
+      <p><strong>Status:</strong> <span id="job-status">{{ job.status }}</span></p>
+      <p><strong>Current step:</strong> <span id="job-step">{{ job.step_description }}</span></p>
+
+      <label>Overall progress</label>
+      <progress id="overall-pct" max="100" value="{{ job.progress }}" style="width:100%;height:1.25rem;"></progress>
+
+      <div id="action-buttons" style="margin-top:1rem;">
+        {% if job.status == "Paused" %}
+          <button onclick="resumeJob()">⏯ Resume</button>
+        {% endif %}
+        <button onclick="deleteJob()">🗑 Delete Job</button>
+      </div>
+    </div>
+
+    <h2>Live Log</h2>
+    <pre id="log-window" class="log-box"></pre>
+  </main>
+</body>
+</html>

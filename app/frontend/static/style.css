@@ -1,0 +1,492 @@
+/* ==== Base Reset ==== */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+  color: inherit;
+  background-color: inherit;
+}
+
+/* ==== Light Mode (Default) ==== */
+html.light-mode {
+  background-color: #f5f7fa;
+  color: #333;
+}
+
+html.light-mode .tile {
+  background: #fff;
+  color: #333;
+  box-shadow: inset 0 0 0 1px #ddd;
+}
+
+html.light-mode .tile h3 {
+  color: #2c2c2c;
+}
+
+html.light-mode form input,
+html.light-mode form textarea,
+html.light-mode form select {
+  background-color: #fff;
+  color: #111;
+  border: 1px solid #999;
+}
+
+html.light-mode form button {
+  border-color: #4caf50;
+  color: #4caf50;
+}
+
+html.light-mode form button:hover {
+  background-color: #4caf50;
+  color: white;
+}
+
+/* ==== Dark Mode ==== */
+html.dark-mode {
+  background-color: #1e1e1e;
+  color: #f5f5f5;
+}
+
+html.dark-mode .tile {
+  background: #2c2c2c;
+  color: #f5f5f5;
+  box-shadow: inset 0 0 0 1px #444;
+}
+
+html.dark-mode .tile h3 {
+  color: #f5f5f5;
+}
+
+html.dark-mode form input,
+html.dark-mode form textarea,
+html.dark-mode form select {
+  background-color: #1e1e1e;
+  color: #eee;
+  border: 1px solid #555;
+}
+
+html.dark-mode form button {
+  border-color: #4caf50;
+  color: #4caf50;
+}
+
+html.dark-mode form button:hover {
+  background-color: #4caf50;
+  color: white;
+}
+
+/* ==== Shared Layout ==== */
+.content {
+  padding: 0.75rem;
+  padding-top: 3rem;
+}
+
+main.dashboard-content,
+main.settings-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+  padding-top: 4.5rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+}
+
+.header-bar {
+  background-color: #2c2c2c;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+}
+
+.header-bar h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.title-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.icon {
+  font-size: 1.6rem;
+}
+
+.title-right {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+.title-right a,
+.title-right .theme-symbol {
+  font-size: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.title-right a:hover,
+.title-right .theme-symbol:hover {
+  transform: scale(1.15);
+}
+
+/* ==== Toast Styling ==== */
+#toast {
+  position: fixed;
+  top: 3.75rem;
+  right: 0.25rem;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem; /* ✅ Adds spacing between toasts */
+}
+
+.toast-msg {
+  background-color: #2e2e2e;
+  color: #eee;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  max-width: 320px;
+  border-left: 5px solid #4caf50;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-msg.fade-out {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* ==== Tiles ==== */
+.tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  row-gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.tile {
+  padding: 0.75rem;
+  border-radius: 6px;
+  min-width: 200px;
+  max-width: 250px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.entry {
+  margin: 2px 0;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.entry strong {
+  font-weight: bold;
+  margin-right: 4px;
+}
+
+/* ==== Forms ==== */
+form input[type="text"],
+form textarea,
+form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+}
+
+form textarea {
+  resize: vertical;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='24' viewBox='0 0 24 24' width='24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1em;
+  padding-right: 2rem;
+}
+
+form button {
+  padding: 5px 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+/* ==== Toggle Switch ==== */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+  margin-left: 10px;
+}
+
+.switch input {
+  display: none;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 24px;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4caf50;
+}
+
+input:checked + .slider::before {
+  transform: translateX(26px);
+}
+
+
+/* ==== Default Light Buttons ==== */
+html.light-mode form button {
+  background-color: transparent;
+  border: 1px solid #4caf50;
+  color: #4caf50;
+}
+
+html.light-mode form button:hover {
+  background-color: #4caf50;
+  color: white;
+}
+
+/* ==== Dark Mode Button Styles ==== */
+html.dark-mode form button {
+  background-color: #1e1e1e;
+  border: 1px solid #4caf50;
+  color: #4caf50;
+}
+
+html.dark-mode form button:hover {
+  background-color: #4caf50;
+  color: #1e1e1e;
+}
+
+
+/* === Settings-specific layout fix === */
+main.settings-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  padding-top: 5rem; /* Shrink top space (was 10rem) */
+  align-items: start; /* Top-align all tiles */
+}
+
+/* Subtle glow on tile hover */
+.tile:hover {
+  box-shadow: 0 0 5px #4caf50aa;
+  transition: box-shadow 0.3s ease;
+}
+
+/* Smooth input transitions */
+form input,
+form textarea,
+form select {
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+form input:focus,
+form textarea:focus,
+form select:focus {
+  border-color: #4caf50;
+  background-color: #111; /* dark mode */
+}
+
+/* Optional: tighter input padding */
+form input,
+form select,
+form textarea {
+  padding: 5px 8px;
+  font-size: 0.95rem;
+}
+
+
+/* === Clean Form Flow === */
+.tile form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tile form label {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.tile form .switch {
+  margin-top: 0.4rem;
+}
+
+.tile form button {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+}
+
+
+.tile form input,
+.tile form textarea,
+.tile form select {
+  margin-top: 0.2rem;
+  margin-bottom: 0.5rem;
+}
+
+
+/* === Match Dashboard Tile Size === */
+main.settings-content .tile {
+  font-size: 0.95rem;
+  max-width: 350px;
+  min-width: 280px;
+  padding: 0.75rem;
+}
+
+/* === Inline Save / Toggle Buttons === */
+.tile form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tile form .input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* === Align save buttons with inputs and toggles */
+.tile form button {
+  margin: 0;
+  white-space: nowrap;
+  padding: 5px 10px;
+  font-size: 0.85rem;
+}
+
+/* === INLINE INPUT WRAP === */
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.input-row .switch {
+  margin: 0;
+}
+
+/* === Make dropdown match input width === */
+.tile select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 0.95rem;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #1e1e1e;
+  color: #eee;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='24' viewBox='0 0 24 24' width='24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1em;
+  padding-right: 2rem;
+}
+
+.progress-container{
+  background:#444;
+  border-radius:4px;
+  overflow:hidden;
+  height:18px;
+}
+.progress-bar{
+  background:#4caf50;      /* vibrant green */
+  height:100%;
+  transition:width .3s ease;
+}
+
+
+/* === Status badge colouring === */
+.status-badge { padding:2px 6px; border-radius:4px; }
+.status-badge.queued    { background:#757575; }
+.status-badge.ripping,
+.status-badge.running   { background:#ffa500; } /* orange */
+.status-badge.finished  { background:#4caf50; } /* green  */
+.status-badge.failed,
+.status-badge.cancelled { background:#e53935; } /* red    */
+
+/* Log panel dark / light handled via custom prop earlier */
+/* Copy button */
+#copy-btn{
+  background:transparent;border:none;cursor:pointer;font-size:1rem;margin-left:4px;
+}
+#copy-btn:hover{transform:scale(1.2);}
+
+
+/* === Status badge colouring === */
+.status-badge{padding:2px 6px;border-radius:4px;}
+.status-badge.queued    {background:#757575;}
+.status-badge.running   {background:#ffa500;} /* orange */
+.status-badge.finished  {background:#4caf50;} /* green  */
+.status-badge.failed,
+.status-badge.cancelled {background:#e53935;} /* red    */
+
+/* Spinner for running jobs on dashboard */
+.job-card.running h2::after{
+  content:" ⏳";
+  display:inline-block;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{from{transform:rotate(0)} to{transform:rotate(360deg);}}
+
+/* Copy-button */
+#copy-btn{
+  background:transparent;border:none;cursor:pointer;font-size:1rem;margin-left:4px;
+}
+#copy-btn:hover{transform:scale(1.2);}
