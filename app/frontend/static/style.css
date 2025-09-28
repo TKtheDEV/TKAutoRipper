@@ -318,7 +318,7 @@ main.settings-content {
   gap: 1rem;
   padding: 1rem;
   padding-top: 5rem; /* Shrink top space (was 10rem) */
-  align-items: start; /* Top-align all tiles */
+  /*align-items: flex-start; /* Top-align all tiles */
 }
 
 /* Subtle glow on tile hover */
