@@ -85,8 +85,6 @@ def remove_drive(payload: dict):
 
 @router.get("/api/drives", dependencies=[Depends(verify_web_auth)])
 def list_drives():
-    import logging
-    logging.info(f"DriveTracker ID: {id(drive_tracker)}")
     return [
         {
             "path": d.path,
