@@ -152,17 +152,48 @@ async def omdb_search(q: str = Query(..., min_length=2), type: str = Query(None,
     ]
     return {"results": results}
 
-def _jellyfin_target_dir(current_dir: Path, title: str, year: str, typ: str, season: int | None) -> Path:
-    base = current_dir.parent if current_dir.exists() else current_dir.parent
-    clean = sanitize_folder(title)
-    typ = (typ or "").lower()
-    if typ == "series" and season:
-        return base / clean / f"Season {season}"
-    y = f" ({year})" if year else ""
-    return base / f"{clean}{y}"
+def _type_label_from_disc(disctype: str) -> str:
+    d = (disctype or "").lower()
+    if "bluray" in d:
+        return "BLURAY"
+    if "dvd" in d:
+        return "DVD"
+    if "cd" in d:
+        return "CD"
+    return "OTHER"
+
+def _jellyfin_target_dir(current_dir: Path, disctype: str, title: str, year: str, typ: str, season: int | None) -> Path:
+    """
+    Build: <OUTPUT_ROOT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
+
+    current_dir: the job's current output directory, typically:
+        .../output/<TYPE>/<Something>/
+    disctype: "dvd_video" | "bluray_video" | etc.
+    title/year/typ: OMDb fields
+    """
+    # Resolve type root: one level above the current title dir (expected to be .../output/<TYPE>)
+    type_root = current_dir.parent  # e.g., .../output/BLURAY
+    type_label = _type_label_from_disc(disctype)  # BLURAY / DVD / CD / OTHER
+
+    # If current_dir isn't already under the correct type root, prefer what we have (we don't move across TYPE)
+    # Usually current_dir.parent.name already equals type_label.
+    category = "Shows" if (typ or "").lower() == "series" else "Movies"
+    clean_title = sanitize_folder(title)
+    suffix_year = f" ({year})" if year else ""
+    title_folder = f"{clean_title}{suffix_year}"
+
+    if (typ or "").lower() == "series" and season:
+        return type_root / category / title_folder / f"Season {season}"
+    else:
+        return type_root / category / title_folder
 
 @router.put("/api/jobs/{job_id}/imdb", dependencies=[Depends(verify_web_auth)])
 async def set_job_imdb(job_id: str, imdbID: str = Query(...), season: int | None = Query(None, ge=1, le=100)):
+    """
+    Set IMDb ID, fetch OMDb metadata,
+    move job's output path to: <OUTPUT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
+    and write NFO.
+    """
     job = job_tracker.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -185,9 +216,16 @@ async def set_job_imdb(job_id: str, imdbID: str = Query(...), season: int | None
     job.metadata = meta
     job.season = season
 
-    # Compute and switch output dir
+    # Compute and switch output dir to: <OUTPUT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
     current_dir = Path(str(job.output_path))
-    target_dir = _jellyfin_target_dir(current_dir, meta.get("Title", ""), meta.get("Year", ""), typ, season)
+    target_dir = _jellyfin_target_dir(
+        current_dir=current_dir,
+        disctype=job.disc_type,
+        title=meta.get("Title", ""),
+        year=meta.get("Year", ""),
+        typ=typ,
+        season=season
+    )
     target_dir.mkdir(parents=True, exist_ok=True)
     job.output_path = target_dir
 

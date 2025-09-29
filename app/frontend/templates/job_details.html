@@ -8,8 +8,7 @@
   <script src="/static/job_details.js" defer></script>
   <script src="/static/toast.js" defer></script>
   <style>
-    /* small, component-scoped helpers to avoid relying on global CSS */
-    .flex{display:flex;align-items:center;}
+    /* page-only dropdown helper */
     .dropdown{position:absolute;z-index:20;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:.25rem 0;max-height:240px;overflow-y:auto;list-style:none;margin:.25rem 0 0 0}
     .dropdown li{padding:.5rem .75rem;cursor:pointer}
     .dropdown li:hover{background:#2a2a2a}
@@ -30,69 +29,99 @@
   </header>
 
   <main class="content" role="main">
-    <div class="tile" id="job-meta">
-      <h2>Job Info</h2>
-      <p><strong>Disc:</strong> {{ job.disc_label }} ({{ job.disc_type }})</p>
-      <p><strong>Status:</strong> <span id="job-status">{{ job.status }}</span></p>
-      <p><strong>Current step:</strong> <span id="job-step">{{ job.step_description }}</span></p>
+    <div class="job-layout">
+      <!-- LEFT -->
+      <div class="left-col">
+        <div class="tile" id="job-meta">
+          <h2>Job Info</h2>
+          <p><strong>Disc:</strong> {{ job.disc_label }} ({{ job.disc_type }})</p>
+          <p><strong>Status:</strong> <span id="job-status">{{ job.status }}</span></p>
+          <p><strong>Current step:</strong> <span id="job-step">{{ job.step_description }}</span></p>
 
-      <!-- Progress: Total -->
-      <label for="overall-pct"><strong>Total</strong> <span id="overall-pct-label">{{ job.progress }}%</span></label>
-      <progress id="overall-pct" max="100" value="{{ job.progress }}" style="width:100%;height:1.25rem;"></progress>
+          <label for="overall-pct"><strong>Total</strong>
+            <span id="overall-pct-label">{{ job.progress }}%</span>
+          </label>
+          <progress id="overall-pct" max="100" value="{{ job.progress }}" style="width:100%;height:1.25rem;"></progress>
 
-      <!-- Progress: Step -->
-      <div id="step-wrap" style="margin-top:0.5rem; display:none;">
-        <label for="step-pct"><strong>Step</strong> <span id="step-pct-label">{{ job.step_progress }}%</span></label>
-        <progress id="step-pct" max="100" value="{{ job.step_progress }}" style="width:100%;height:1.0rem;"></progress>
-      </div>
-
-      <!-- Progress: Title -->
-      <div id="title-wrap" style="margin-top:0.5rem; display:none;">
-        <label for="title-pct"><strong>Title</strong> <span id="title-pct-label">0%</span></label>
-        <progress id="title-pct" max="100" value="0" style="width:100%;height:0.8rem;"></progress>
-      </div>
-
-      <div id="action-buttons" style="margin-top:1rem;">
-        <button onclick="deleteJob()">🗑 Delete Job</button>
-      </div>
-
-      <!-- Output Location -->
-      <div class="tile" id="output-wrap" style="margin-top:1rem;">
-        <h3>Output Location</h3>
-        <div class="flex">
-          <input id="output-path" type="text" style="flex:1" placeholder="">
-          <button id="output-save" style="margin-left:0.5rem;">Save</button>
-        </div>
-        <small id="output-lock-hint" style="display:none;">🔒 Output is locked for this job.</small>
-      </div>
-
-      <!-- OMDb metadata -->
-      <div class="tile" id="omdb-wrap" style="margin-top:1rem;">
-        <h3>Metadata (OMDb)</h3>
-        <div class="flex">
-          <div style="flex:1; position:relative;">
-            <label for="omdb-query">Title</label>
-            <input id="omdb-query" type="text" autocomplete="off" placeholder="Search title…">
-            <ul id="omdb-results" class="dropdown" style="display:none;"></ul>
+          <div id="step-wrap" style="margin-top:0.5rem; display:none;">
+            <label for="step-pct"><strong>Step</strong>
+              <span id="step-pct-label">{{ job.step_progress }}%</span>
+            </label>
+            <progress id="step-pct" max="100" value="{{ job.step_progress }}" style="width:100%;height:1.0rem;"></progress>
           </div>
-          <div style="width:110px; margin-left:0.75rem;">
-            <label for="omdb-season">Season</label>
-            <input id="omdb-season" type="number" min="1" step="1" placeholder="e.g. 5" disabled>
+
+          <div id="title-wrap" style="margin-top:0.5rem; display:none;">
+            <label for="title-pct"><strong>Title</strong>
+              <span id="title-pct-label">0%</span>
+            </label>
+            <progress id="title-pct" max="100" value="0" style="width:100%;height:0.8rem;"></progress>
+          </div>
+
+          <div id="action-buttons" style="margin-top:1rem;">
+            <button onclick="deleteJob()">🗑 Delete Job</button>
           </div>
         </div>
-        <div style="margin-top:0.5rem;">
-          <button id="omdb-apply" disabled>Apply</button>
+
+        <!-- Output -->
+        <div class="tile" id="output-wrap">
+          <h3>Output Location</h3>
+          <form id="output-form" onsubmit="return saveOutput(event)">
+            <input id="output-path" name="value" type="text" placeholder="">
+            <div class="input-row right">
+              <button type="submit" id="output-save">Save</button>
+            </div>
+            <small id="output-lock-hint" style="display:none;">🔒 Output is locked for this job.</small>
+          </form>
         </div>
-        <div id="omdb-picked" class="omdb-picked" style="margin-top:0.5rem; display:none;"></div>
+
+        <!-- OMDb -->
+        <div class="tile" id="omdb-wrap">
+          <h3>Metadata (OMDb)</h3>
+
+          <!-- Row 1: Title + Season -->
+          <div class="input-row omdb-row">
+            <div style="flex:1; position:relative; min-width:0;">
+              <label for="omdb-query">Title</label>
+              <input id="omdb-query" type="text" autocomplete="off" placeholder="Search title…">
+              <ul id="omdb-results" class="dropdown" style="display:none;"></ul>
+            </div>
+            <div style="width:120px;">
+              <label for="omdb-season">Season</label>
+              <input id="omdb-season" type="number" min="1" step="1" placeholder="e.g. 5" disabled>
+            </div>
+          </div>
+
+          <!-- Row 2: IMDb ID -->
+          <div class="input-row">
+            <div style="flex:1; min-width:0;">
+              <label for="omdb-imdbid">IMDb ID</label>
+              <input id="omdb-imdbid" type="text" placeholder="e.g. tt0083866">
+            </div>
+          </div>
+
+          <!-- Row 3: Apply -->
+          <form id="omdb-form" onsubmit="return applyMetadata(event)">
+            <div class="input-row right" style="margin-top:.5rem;">
+              <button id="omdb-apply" type="submit" disabled>Apply</button>
+            </div>
+          </form>
+
+          <div id="omdb-picked" class="omdb-picked" style="margin-top:0.5rem; display:none;"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="tile log-tile">
+        <div class="log-header">
+          <h2>Live Log</h2>
+          <div class="log-controls">
+            <label><input type="checkbox" id="autoscroll" checked> Auto-scroll</label>
+            <a id="download-log" href="#" download>📄 Download Full Log</a>
+          </div>
+        </div>
+        <pre id="log-window" class="log-box"></pre>
       </div>
     </div>
-
-    <h2>Live Log</h2>
-    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-      <label><input type="checkbox" id="autoscroll" checked> Auto-scroll</label>
-      <a id="download-log" href="#" download>📄 Download Full Log</a>
-    </div>
-    <pre id="log-window" class="log-box"></pre>
   </main>
 </body>
 </html>
