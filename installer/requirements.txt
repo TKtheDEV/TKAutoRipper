@@ -4,3 +4,4 @@ jinja2
 psutil
 python-multipart
 requests
+httpx

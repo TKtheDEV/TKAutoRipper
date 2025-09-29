@@ -490,3 +490,17 @@ main.settings-content .tile {
   background:transparent;border:none;cursor:pointer;font-size:1rem;margin-left:4px;
 }
 #copy-btn:hover{transform:scale(1.2);}
+
+
+/* === TKAR: Job Log Panel === */
+#log-window {
+  max-height: 60vh;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 0.9rem;
+  border: 1px solid #444;
+}
