@@ -1,6 +1,6 @@
 # app/api/jobs.py
 from fastapi import APIRouter, Depends, HTTPException, Request, Body, Query
-from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pathlib import Path
 import httpx
 
@@ -13,7 +13,10 @@ from app.core.job.job import sanitize_folder
 
 router = APIRouter()
 
-# ---------- Pages ----------
+# ──────────────────────────────────────────────────────────────────────────────
+# Pages
+# ──────────────────────────────────────────────────────────────────────────────
+
 @router.get("/jobs/{job_id}", response_class=HTMLResponse,
             dependencies=[Depends(verify_web_auth)])
 def job_details_page(request: Request, job_id: str):
@@ -22,7 +25,11 @@ def job_details_page(request: Request, job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return templates.TemplateResponse("job_details.html", {"request": request, "job": job})
 
-# ---------- Basic job APIs ----------
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Basic job APIs
+# ──────────────────────────────────────────────────────────────────────────────
+
 @router.get("/api/jobs/{job_id}", dependencies=[Depends(verify_web_auth)])
 def get_job(job_id: str):
     job = job_tracker.get_job(job_id)
@@ -30,9 +37,11 @@ def get_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return job.to_dict()
 
+
 @router.get("/api/jobs", dependencies=[Depends(verify_web_auth)])
 def list_jobs():
     return [job.to_dict() for job in job_tracker.list_jobs()]
+
 
 @router.post("/api/jobs/{job_id}/cancel", dependencies=[Depends(verify_web_auth)])
 def cancel_job(job_id: str):
@@ -44,7 +53,11 @@ def cancel_job(job_id: str):
     drive_tracker.release_drive(job.drive)
     return {"status": "cancelled"}
 
-# ---------- Full text log ----------
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Full text log
+# ──────────────────────────────────────────────────────────────────────────────
+
 @router.get("/jobs/{job_id}/log", dependencies=[Depends(verify_web_auth)], response_class=PlainTextResponse)
 def job_log(job_id: str):
     job = job_tracker.get_job(job_id)
@@ -55,17 +68,69 @@ def job_log(job_id: str):
         return ""
     return path.read_text(errors="ignore")
 
-# ---------- Output path (edit before lock) ----------
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Output path (edit before lock)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _other_root() -> Path:
+    """Base output directory for ISO/ROM jobs from config OTHER.outputdirectory."""
+    base = config.section("OTHER").get("outputdirectory") \
+        or config.section("Other").get("outputdirectory") \
+        or config.section("General").get("outputdirectory")
+    return Path(str(base or "~/TKAutoRipper/output/ISO")).expanduser()
+
+
+def _proposed_rom_path(job) -> Path:
+    """
+    Proposed *file* path for ROM/other discs:
+      <OTHER.outputdirectory>/<DISCNAME>/<DISCNAME>.iso(.zst|.bz2)
+    Compression decided by OTHER.{usecompression,compression}
+    """
+    name = sanitize_folder(getattr(job, "disc_label", None) or "DISC")
+    base_dir = _other_root() / name
+    base_dir = base_dir.expanduser()
+
+    other_cfg = config.section("OTHER")
+    use_comp = bool(other_cfg.get("usecompression", True))
+    comp_alg = str(other_cfg.get("compression", "zstd")).lower()
+
+    if use_comp and comp_alg == "zstd":
+        return base_dir / f"{name}.iso.zst"
+    if use_comp and comp_alg in {"bz2", "bzip2"}:
+        return base_dir / f"{name}.iso.bz2"
+    return base_dir / f"{name}.iso"
+
+
 @router.get("/api/jobs/{job_id}/output", dependencies=[Depends(verify_web_auth)])
 def get_output(job_id: str):
+    """
+    Returns current output info.
+    For ROM/other discs also returns a 'proposed_path' and a 'duplicate' flag so the UI
+    can be zero-click unless the target already exists.
+    """
     job = job_tracker.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {
+
+    dtype = (job.disc_type or "").lower()
+    payload = {
         "output_path": str(job.output_path),
         "override_filename": job.override_filename,
         "locked": bool(job.output_locked),
     }
+
+    if dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}:
+        proposed = _proposed_rom_path(job)
+        # Parent folder is created on PUT; here we just report existence of the final file
+        duplicate = proposed.exists()
+        payload.update({
+            "proposed_path": str(proposed),
+            "duplicate": duplicate,
+        })
+
+    return payload
+
 
 @router.put("/api/jobs/{job_id}/output", dependencies=[Depends(verify_web_auth)])
 def set_output(job_id: str, payload: dict = Body(...)):
@@ -91,10 +156,10 @@ def set_output(job_id: str, payload: dict = Body(...)):
         job.override_filename = None
         return {"status": "ok", "output_path": str(job.output_path), "override_filename": None, "type": dtype}
 
-    # ROM must be a final file path
-    if dtype in {"cd_rom", "dvd_rom", "bluray_rom"}:
+    # ROM & other must be a final file path
+    if dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}:
         if not p.suffix:
-            raise HTTPException(status_code=400, detail="For ROM discs, output must be a final file path (e.g. .../MyDisc.iso or .iso.zst).")
+            raise HTTPException(status_code=400, detail="For ROM/other discs, output must be a final file path (e.g. .../MyDisc.iso or .iso.zst).")
 
         other_cfg = config.section("OTHER")
         comp_alg = str(other_cfg.get("compression", "zstd")).lower()
@@ -113,15 +178,20 @@ def set_output(job_id: str, payload: dict = Body(...)):
         if not valid:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid extension for ROM disc. Allowed: {sorted(allowed)}"
+                detail=f"Invalid extension for ROM/other disc. Allowed: {sorted(allowed)}"
             )
 
         p.parent.mkdir(parents=True, exist_ok=True)
         job.output_path = p.parent
         job.override_filename = p.name
-        return {"status": "ok", "output_path": str(job.output_path), "override_filename": job.override_filename, "type": dtype}
+        return {
+            "status": "ok",
+            "output_path": str(job.output_path),
+            "override_filename": job.override_filename,
+            "type": dtype
+        }
 
-    # fallback → treat as folder
+    # Fallback → treat as folder
     if p.suffix:
         raise HTTPException(status_code=400, detail="Output must be a folder for this disc type.")
     p.mkdir(parents=True, exist_ok=True)
@@ -129,12 +199,18 @@ def set_output(job_id: str, payload: dict = Body(...)):
     job.override_filename = None
     return {"status": "ok", "output_path": str(job.output_path), "override_filename": None, "type": dtype}
 
-# ---------- OMDb support ----------
+
+# ──────────────────────────────────────────────────────────────────────────────
+# OMDb support
+# ──────────────────────────────────────────────────────────────────────────────
+
 def _omdb_key() -> str:
+    # Accept either "General" or "GENERAL"
     key = config.section("General").get("omdbapikey") or config.section("GENERAL").get("omdbapikey")
     if not key:
         raise HTTPException(status_code=400, detail="OMDb API key not configured")
     return key
+
 
 @router.get("/api/omdb/search", dependencies=[Depends(verify_web_auth)])
 async def omdb_search(q: str = Query(..., min_length=2), type: str = Query(None, pattern="^(movie|series)$")):
@@ -152,6 +228,7 @@ async def omdb_search(q: str = Query(..., min_length=2), type: str = Query(None,
     ]
     return {"results": results}
 
+
 def _type_label_from_disc(disctype: str) -> str:
     d = (disctype or "").lower()
     if "bluray" in d:
@@ -162,21 +239,18 @@ def _type_label_from_disc(disctype: str) -> str:
         return "CD"
     return "OTHER"
 
+
 def _jellyfin_target_dir(current_dir: Path, disctype: str, title: str, year: str, typ: str, season: int | None) -> Path:
     """
     Build: <OUTPUT_ROOT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
 
     current_dir: the job's current output directory, typically:
         .../output/<TYPE>/<Something>/
-    disctype: "dvd_video" | "bluray_video" | etc.
-    title/year/typ: OMDb fields
     """
-    # Resolve type root: one level above the current title dir (expected to be .../output/<TYPE>)
-    type_root = current_dir.parent  # e.g., .../output/BLURAY
-    type_label = _type_label_from_disc(disctype)  # BLURAY / DVD / CD / OTHER
+    # One level above the current title dir (expected to be .../output/<TYPE>)
+    type_root = current_dir.parent
+    _ = _type_label_from_disc(disctype)  # not used directly but kept for clarity
 
-    # If current_dir isn't already under the correct type root, prefer what we have (we don't move across TYPE)
-    # Usually current_dir.parent.name already equals type_label.
     category = "Shows" if (typ or "").lower() == "series" else "Movies"
     clean_title = sanitize_folder(title)
     suffix_year = f" ({year})" if year else ""
@@ -187,12 +261,13 @@ def _jellyfin_target_dir(current_dir: Path, disctype: str, title: str, year: str
     else:
         return type_root / category / title_folder
 
+
 @router.put("/api/jobs/{job_id}/imdb", dependencies=[Depends(verify_web_auth)])
 async def set_job_imdb(job_id: str, imdbID: str = Query(...), season: int | None = Query(None, ge=1, le=100)):
     """
-    Set IMDb ID, fetch OMDb metadata,
-    move job's output path to: <OUTPUT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
-    and write NFO.
+    Set IMDb ID, fetch OMDb metadata, move job's output path to:
+      <OUTPUT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
+    Also writes NFO (best-effort).
     """
     job = job_tracker.get_job(job_id)
     if not job:
@@ -216,7 +291,7 @@ async def set_job_imdb(job_id: str, imdbID: str = Query(...), season: int | None
     job.metadata = meta
     job.season = season
 
-    # Compute and switch output dir to: <OUTPUT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
+    # Switch output dir to: <OUTPUT>/<TYPE>/<Movies|Shows>/<Title (Year)>[/Season N/]
     current_dir = Path(str(job.output_path))
     target_dir = _jellyfin_target_dir(
         current_dir=current_dir,
@@ -229,9 +304,9 @@ async def set_job_imdb(job_id: str, imdbID: str = Query(...), season: int | None
     target_dir.mkdir(parents=True, exist_ok=True)
     job.output_path = target_dir
 
-    # Write NFO for Jellyfin
+    # Write NFO for Jellyfin (best effort; ignore errors)
     try:
-        job.write_jellyfin_nfo(target_dir)
+        job.write_jellyfin_nfo(target_dir)  # available on Job class in your project
     except Exception:
         pass
 

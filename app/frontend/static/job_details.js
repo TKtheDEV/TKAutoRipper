@@ -1,250 +1,186 @@
-/* global showToast, toggleTheme */
+import { initTheme, toggleTheme, fetchJSON, showToast } from './ui.js';
+window.toggleTheme = toggleTheme;
 
-document.addEventListener("DOMContentLoaded", async () => {
-  // Theme
-  const mode = getCookie("theme") ??
-               (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  applyTheme(mode);
+document.addEventListener('DOMContentLoaded', async ()=>{
+  initTheme();
 
-  const jobId    = document.body.dataset.jobId;
-  const discType = (document.body.dataset.discType || "").toLowerCase();
+  const jobId     = document.body.dataset.jobId;
+  const discType  = (document.body.dataset.discType||'').toLowerCase();
+  const discLabel = document.body.dataset.discLabel || '';
+  const drivePath = document.body.dataset.drivePath || '';
 
-  // preload log
-  fetch(`/jobs/${jobId}/log`)
-    .then(res => res.text())
-    .then(text => {
-      const logBox = document.getElementById("log-window");
-      if (logBox) {
-        logBox.textContent = text || "";
-        autoScrollLog();
-      }
-    }).catch(()=>{});
+  // Drive line
+  if (drivePath){ document.getElementById('drive-path').textContent = drivePath; document.getElementById('drive-line').style.display=''; }
 
-  // download link
-  const downloadLink = document.getElementById("download-log");
+  // Prefill OMDb title
+  const q = document.getElementById('omdb-query');
+  if (q && discLabel) q.value = discLabel;
+
+  // Load full log
+  try{
+    const text = await fetch('/jobs/'+jobId+'/log').then(r=>r.text());
+    const log  = document.getElementById('log-window'); log.textContent = text || '';
+    autoScroll();
+  }catch{}
+
+  const downloadLink = document.getElementById('download-log');
   if (downloadLink) downloadLink.href = `/jobs/${jobId}/log`;
 
-  // Output path hints
-  const outputInput = document.getElementById("output-path");
-  if (["dvd_video","bluray_video","cd_audio"].includes(discType)) {
-    outputInput.placeholder = "/media/Library/Movies   (folder only)";
-    outputInput.title = "For video/audio discs, choose a folder (no filename).";
-  } else if (["cd_rom","dvd_rom","bluray_rom"].includes(discType)) {
-    outputInput.placeholder = "/media/ISOs/MyDisc.iso.zst   (final file path)";
-    outputInput.title = "For ROM discs, enter the final file path (e.g., .../MyDisc.iso or .iso.zst).";
-  }
+  // Output prefill + ROM proposal
+  const outputInput = document.getElementById('output-path');
+  try{
+    const j = await fetchJSON(`/api/jobs/${jobId}/output`);
+    const isRom = ['cd_rom','dvd_rom','bluray_rom','other_disc'].includes(discType);
 
-  // Prefill output + lock state
-  try {
-    const r = await fetch(`/api/jobs/${jobId}/output`);
-    if (r.ok) {
-      const j = await r.json();
+    if (isRom && j.proposed_path){
+      outputInput.value = j.proposed_path;
+      if (j.duplicate === false){ outputInput.disabled = true; document.getElementById('output-save').disabled = true; }
+      if (j.duplicate === true){ showToast('A file with this name exists. Please choose another output path.','error'); }
+    }else{
       outputInput.value = j.override_filename ? `${j.output_path}/${j.override_filename}` : j.output_path;
       outputInput.disabled = !!j.locked;
-      const btn  = document.getElementById("output-save");
-      const hint = document.getElementById("output-lock-hint");
-      if (btn)  btn.disabled  = !!j.locked;
-      if (hint) hint.style.display = j.locked ? "" : "none";
+      document.getElementById('output-save').disabled = !!j.locked;
     }
-  } catch {}
+    document.getElementById('output-lock-hint').style.display = j.locked ? '' : 'none';
+  }catch{}
 
-  // OMDb search
-  const q           = document.getElementById("omdb-query");
-  const pop         = document.getElementById("omdb-results");
-  const seasonInput = document.getElementById("omdb-season");
-  const imdbInput   = document.getElementById("omdb-imdbid");
-  const applyBtn    = document.getElementById("omdb-apply");
-  const pickedBox   = document.getElementById("omdb-picked");
-  let picked = null, debounceT = null;
+  // Save output
+  document.getElementById('output-form')?.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const v = outputInput.value.trim(); if (!v) return showToast('Enter a path','error');
 
-  function hidePop(){ if (pop) pop.style.display="none"; }
-  function showPop(){ if (pop) pop.style.display=""; }
-  function imdbOk(v){ return /^tt\d{7,}$/.test(v.trim()); }
+    if (['dvd_video','bluray_video','cd_audio'].includes(discType)){
+      const leaf = v.split('/').pop()||''; if (/\.[a-z0-9]{2,5}$/i.test(leaf)) return showToast('Provide a folder (no filename).','error');
+    }else if (['cd_rom','dvd_rom','bluray_rom','other_disc'].includes(discType)){
+      const leaf = v.split('/').pop()||''; if (!/\.[a-z0-9]{2,5}$/i.test(leaf)) return showToast('Provide the final file path (e.g., .iso or .iso.zst).','error');
+    }
+
+    try{
+      const res = await fetchJSON(`/api/jobs/${jobId}/output`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:v})});
+      outputInput.value = res.override_filename ? `${res.output_path}/${res.override_filename}` : res.output_path;
+      showToast('Output updated');
+    }catch(err){ showToast(`Failed: ${err.message||err}`,'error'); }
+  });
+
+  // OMDb (only present for DVD/BD)
+  const pop = document.getElementById('omdb-results');
+  const seasonInput = document.getElementById('omdb-season');
+  const imdbInput = document.getElementById('omdb-imdbid');
+  const applyBtn = document.getElementById('omdb-apply');
+  const pickedBox = document.getElementById('omdb-picked');
+  let picked=null, t=null;
+
+  function imdbOk(v){ return /^tt\d{7,}$/.test((v||'').trim()); }
+  function hidePop(){ if (pop) pop.style.display='none'; }
+  function showPop(){ if (pop) pop.style.display=''; }
+  function updateApply(){ if (applyBtn) applyBtn.disabled = !(imdbOk(imdbInput?.value) || (picked&&picked.imdbID)); }
 
   function renderResults(items){
     if (!pop) return;
-    pop.innerHTML = "";
-    items.forEach(it => {
-      const li = document.createElement("li");
+    pop.innerHTML = '';
+    items.forEach(it=>{
+      const li=document.createElement('li');
       li.textContent = `${it.Title} (${it.Year}) [${it.Type}]`;
-      li.addEventListener("click", () => {
+      li.addEventListener('click',()=>{
         picked = it;
-        q.value = it.Title;
-        imdbInput.value = it.imdbID || "";
-        const isSeries = (it.Type || "").toLowerCase() === "series";
-        seasonInput.disabled = !isSeries;
-        seasonInput.placeholder = isSeries ? "e.g. 5" : "—";
-        if (!isSeries) seasonInput.value = "";
-        pickedBox.style.display = "";
+        if (q) q.value = it.Title;
+        if (imdbInput) imdbInput.value = it.imdbID || '';
+        const isSeries = (it.Type||'').toLowerCase()==='series';
+        if (seasonInput){ seasonInput.disabled = !isSeries; seasonInput.placeholder = isSeries?'e.g. 5':'—'; if(!isSeries) seasonInput.value=''; }
+        pickedBox.style.display='';
         pickedBox.textContent = `Selected: ${it.Title} (${it.Year}) – ${it.imdbID}`;
-        applyBtn.disabled = !(imdbInput.value && imdbOk(imdbInput.value));
-        hidePop();
+        updateApply(); hidePop();
       });
       pop.appendChild(li);
-    });
-    showPop();
+    }); showPop();
   }
+  async function searchOMDb(){
+    const v = (q?.value||'').trim();
+    if (v.length<2){ hidePop(); return; }
+    try{ const j = await fetchJSON(`/api/omdb/search?q=${encodeURIComponent(v)}`); renderResults(j.results||[]); }catch{}
+  }
+  q?.addEventListener('input',()=>{ picked=null; pickedBox.style.display='none'; clearTimeout(t); t=setTimeout(searchOMDb,250); updateApply(); });
+  q?.addEventListener('focus',()=>{ if ((q.value||'').trim().length>=2) searchOMDb(); });
+  document.addEventListener('click',(e)=>{ if (q && e.target!==q && !pop?.contains(e.target)) hidePop(); });
+  imdbInput?.addEventListener('input', updateApply);
 
-  async function searchNow(){
-    const v = (q?.value || "").trim();
-    if (v.length < 2){ hidePop(); return; }
+  document.getElementById('omdb-form')?.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const imdbID = (imdbInput?.value||'').trim(); if (!imdbOk(imdbID)) return showToast('Enter a valid IMDb ID or pick a result.','error');
+    const season = seasonInput && !seasonInput.disabled && seasonInput.value ? parseInt(seasonInput.value,10) : undefined;
     try{
-      const r = await fetch(`/api/omdb/search?q=${encodeURIComponent(v)}`);
-      const j = await r.json();
-      renderResults(j.results || []);
-    }catch{}
-  }
-
-  q?.addEventListener("input", ()=>{
-    clearTimeout(debounceT); debounceT = setTimeout(searchNow, 250);
-  });
-  q?.addEventListener("focus", ()=>{ if ((q.value || "").trim().length >= 2) searchNow(); });
-  document.addEventListener("click", (e)=>{ if (e.target !== q && !pop.contains(e.target)) hidePop(); });
-
-  imdbInput.addEventListener("input", ()=>{
-    applyBtn.disabled = !imdbOk(imdbInput.value);
+      const u = `/api/jobs/${jobId}/imdb?imdbID=${encodeURIComponent(imdbID)}${season?`&season=${season}`:''}`;
+      const j = await fetchJSON(u,{method:'PUT'});
+      if (document.getElementById('output-path')) document.getElementById('output-path').value = j.output_path;
+      showToast('Metadata applied');
+    }catch{ showToast('Could not apply metadata','error'); }
   });
 
-  // WebSocket for progress/log
-  openWebSocket(jobId);
+  // Buttons
+  document.getElementById('cancel-btn')?.addEventListener('click', async ()=>{
+    if (!confirm('Cancel this job?')) return;
+    try{ await fetchJSON(`/api/jobs/${jobId}/cancel`,{method:'POST'}); showToast('Job cancelled'); } catch{ showToast('Cancel failed','error'); }
+  });
+  document.getElementById('resume-btn')?.addEventListener('click', async ()=>{
+    try{ await fetchJSON(`/api/jobs/${jobId}/resume`,{method:'POST'}); showToast('Job resumed'); } catch{}
+  });
+  document.getElementById('delete-btn')?.addEventListener('click', async ()=>{
+    if (!confirm('Delete this job? If running, it will be cancelled.')) return;
+    try{ await fetchJSON(`/api/jobs/${jobId}/cancel`,{method:'POST'}); location.href='/'; } catch{}
+  });
+
+  // WebSocket
+  openWS(jobId);
 });
 
-// Save output (form submit)
-window.saveOutput = async function saveOutput(e) {
-  if (e?.preventDefault) e.preventDefault();
-  const jobId    = document.body.dataset.jobId;
-  const discType = (document.body.dataset.discType || "").toLowerCase();
-  const input = document.getElementById("output-path");
-  if (!input || !input.value.trim()) { showToast("Enter a path", "error"); return false; }
-  const v = input.value.trim();
-
-  if (["dvd_video","bluray_video","cd_audio"].includes(discType)) {
-    const leaf = v.split("/").pop() || "";
-    if (/\.[a-z0-9]{2,5}$/i.test(leaf)) { showToast("Provide a folder (no filename).", "error"); return false; }
-  } else if (["cd_rom","dvd_rom","bluray_rom"].includes(discType)) {
-    const leaf = v.split("/").pop() || "";
-    if (!/\.[a-z0-9]{2,5}$/i.test(leaf)) { showToast("Provide the final file path (e.g., MyDisc.iso or .iso.zst).", "error"); return false; }
-  }
-
-  try {
-    const res = await fetch(`/api/jobs/${jobId}/output`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: v })
-    });
-    if (!res.ok) { showToast(`Failed: ${await res.text()}`, "error"); return false; }
-    const j = await res.json();
-    input.value = j.override_filename ? `${j.output_path}/${j.override_filename}` : j.output_path;
-    showToast("Output updated");
-    return true;
-  } catch { showToast("Save failed!", "error"); return false; }
-};
-
-// Apply metadata (form submit)
-window.applyMetadata = async function applyMetadata(e){
-  if (e?.preventDefault) e.preventDefault();
-  const jobId      = document.body.dataset.jobId;
-  const imdbInput  = document.getElementById("omdb-imdbid");
-  const seasonInput= document.getElementById("omdb-season");
-  const output     = document.getElementById("output-path");
-  const imdbID = (imdbInput.value || "").trim();
-  if (!/^tt\d{7,}$/.test(imdbID)) { showToast("Enter a valid IMDb ID (e.g., tt1234567) or pick a result.", "error"); return false; }
-  const season = seasonInput.disabled || !seasonInput.value ? undefined : parseInt(seasonInput.value, 10);
-
-  try{
-    const url = `/api/jobs/${jobId}/imdb?imdbID=${encodeURIComponent(imdbID)}${season ? `&season=${season}` : ""}`;
-    const res = await fetch(url, { method: "PUT" });
-    if (!res.ok) throw new Error(await res.text());
-    const j = await res.json();
-    if (output) output.value = j.output_path;
-    showToast("Metadata applied; output folder updated.");
-    return true;
-  }catch(err){ showToast("Could not apply metadata", "error"); return false; }
-};
-
-window.deleteJob = async function deleteJob() {
-  const jobId = document.body.dataset.jobId;
-  if (!confirm("Delete this job? If running, it will be cancelled.")) return;
-  try { await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" }); } catch {}
-  location.href = "/";
-};
-
-function openWebSocket(jobId, attempt = 0) {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
+function openWS(jobId, attempt=0){
+  const proto = location.protocol==='https:'?'wss':'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws/jobs/${jobId}`);
 
-  const logBox     = document.getElementById("log-window");
-  const overallBar = document.getElementById("overall-pct");
-  const overallLbl = document.getElementById("overall-pct-label");
-  const stepWrap   = document.getElementById("step-wrap");
-  const stepBar    = document.getElementById("step-pct");
-  const stepLbl    = document.getElementById("step-pct-label");
-  const titleWrap  = document.getElementById("title-wrap");
-  const titleBar   = document.getElementById("title-pct");
-  const titleLbl   = document.getElementById("title-pct-label");
-  const statusEl   = document.getElementById("job-status");
-  const stepEl     = document.getElementById("job-step");
+  const log  = document.getElementById('log-window');
+  const overallBar = document.getElementById('overall-pct');
+  const overallLbl = document.getElementById('overall-pct-label');
+  const stepLabel  = document.getElementById('step-label');
+  const stepIndex  = document.getElementById('step-index');
+  const stepBar    = document.getElementById('step-pct');
+  const stepPctLbl = document.getElementById('step-pct-label');
+  const titleLabel = document.getElementById('title-label');
+  const titleBar   = document.getElementById('title-pct');
+  const titleLbl   = document.getElementById('title-pct-label');
+  const statusEl   = document.getElementById('job-status');
+  const stepEl     = document.getElementById('job-step');
 
-  function applyProgress(msg) {
-    if (typeof msg.progress === "number") {
-      overallBar.value = msg.progress; overallLbl.textContent = `${msg.progress}%`;
+  const show = (el,on)=>{ if (el) el.style.display = on?'':'none'; };
+
+  function applyProgress(msg){
+    if (typeof msg.progress==='number'){ overallBar.value = msg.progress; overallLbl.textContent = `${msg.progress}%`; }
+    if (typeof msg.step_progress==='number'){ show(stepLabel,true); show(stepBar,true); stepBar.value = msg.step_progress; stepPctLbl.textContent = `${msg.step_progress}%`; }
+    if (typeof msg.title_progress==='number'){ const on=msg.title_progress>0; show(titleLabel,on); show(titleBar,on); titleBar.value = msg.title_progress; titleLbl.textContent = `${msg.title_progress}%`; }
+    if (typeof msg.step_index==='number' && typeof msg.step_total==='number'){ stepIndex.textContent = `(${msg.step_index}/${msg.step_total})`; }
+    if (typeof msg.output_locked==='boolean'){
+      const inp=document.getElementById('output-path'), btn=document.getElementById('output-save'), hint=document.getElementById('output-lock-hint');
+      if (inp)  inp.disabled = msg.output_locked; if (btn) btn.disabled = msg.output_locked; if (hint) hint.style.display = msg.output_locked?'':'none';
     }
-    if (typeof msg.step_progress === "number") {
-      const showStep = msg.step_progress > 0;
-      stepWrap.style.display = showStep ? "" : "none";
-      stepBar.value = msg.step_progress; stepLbl.textContent = `${msg.step_progress}%`;
-    }
-    if (typeof msg.title_progress === "number") {
-      const showTitle = msg.title_progress > 0;
-      titleWrap.style.display = showTitle ? "" : "none";
-      titleBar.value = msg.title_progress; titleLbl.textContent = `${msg.title_progress}%`;
-    }
-    if (typeof msg.output_locked === "boolean") {
-      document.getElementById("output-path").disabled = msg.output_locked;
-      document.getElementById("output-save").disabled = msg.output_locked;
-      document.getElementById("output-lock-hint").style.display = msg.output_locked ? "" : "none";
-    }
-    if (msg.status) statusEl.textContent = msg.status;
-    if (msg.step)   stepEl.textContent   = msg.step;
+    if (msg.status && statusEl){ statusEl.textContent = msg.status; }
+    if (msg.step && stepEl){ stepEl.textContent = msg.step; }
   }
 
-  ws.onmessage = ({ data }) => {
+  ws.onmessage = ({data})=>{
     const msg = JSON.parse(data);
-    if (msg.line && logBox) { logBox.textContent += msg.line + "\n"; autoScrollLog(); }
+    if (msg.line && log){ log.textContent += msg.line + '\n'; autoScroll(); }
     applyProgress(msg);
   };
-  ws.onclose = () => {
-    const status = (document.getElementById("job-status")?.textContent || "").toLowerCase();
-    if (!/finished|failed|cancelled/.test(status)) {
-      const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
-      setTimeout(() => openWebSocket(jobId, attempt + 1), backoff);
+  ws.onclose = ()=>{
+    const status = (document.getElementById('job-status')?.textContent||'').toLowerCase();
+    if (!/finished|failed|cancelled/.test(status)){
+      const backoff = Math.min(1000*Math.pow(2,attempt), 10000);
+      setTimeout(()=>openWS(jobId, attempt+1), backoff);
     }
   };
 }
 
-function autoScrollLog() {
-  const logBox = document.getElementById("log-window");
-  const auto   = document.getElementById("autoscroll");
-  if (logBox && auto && auto.checked) logBox.scrollTop = logBox.scrollHeight;
-}
-
-/* basic theme helpers (mirrors other pages) */
-function getCookie(name) {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-function setCookie(name, value, days = 365) {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
-}
-function applyTheme(mode) {
-  const icon = document.getElementById("theme-icon");
-  document.documentElement.classList.remove("dark-mode", "light-mode");
-  document.documentElement.classList.add(`${mode}-mode`);
-  if (icon) icon.textContent = mode === "dark" ? "🌙" : "☀️";
-  setCookie("theme", mode);
-}
-function toggleTheme() {
-  const current = getCookie("theme") || "light";
-  const next = current === "light" ? "dark" : "light";
-  applyTheme(next);
+function autoScroll(){
+  const log = document.getElementById('log-window');
+  const auto = document.getElementById('autoscroll');
+  if (log && auto && auto.checked) log.scrollTop = log.scrollHeight;
 }

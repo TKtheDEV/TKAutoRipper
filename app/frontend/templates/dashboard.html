@@ -5,12 +5,16 @@
   <title>TKAutoRipper Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/gif" href="/static/favicon.gif">
-  <script>document.documentElement.classList.add('dark-mode');</script>
-  <script src="/static/dashboard.js" defer></script>
-  <script src="/static/toast.js" defer></script>
+  <script type="module" src="/static/dashboard.js" defer></script>
+  <script type="module">
+    import { initTheme, toggleTheme } from '/static/ui.js';
+    window.toggleTheme = toggleTheme;
+    document.addEventListener('DOMContentLoaded', initTheme);
+  </script>
 </head>
 <body>
-    <div id="toast"></div>
+  <div id="toast"></div>
+
   <header class="header-bar" role="banner" aria-label="Site Header">
     <div class="title-left">
       <span class="icon">📀</span>
@@ -19,56 +23,51 @@
     <div class="title-right">
       <span id="theme-icon" class="theme-symbol" onclick="toggleTheme()">☀️</span>
       <a href="/settings" title="Settings">⚙️</a>
-    </div>    
+    </div>
   </header>
+
   <main class="content" role="main">
     <h2>System Information</h2>
-    <div class="tile-row" id="system-info">
-      <div class="tile" id="os_info">
+    <div class="grid grid--auto" id="system-info">
+      <div class="card" id="os_info">
         <h3>OS Info</h3>
-        <div class="entry"><strong>OS:</strong> <span id="os">loading...</span></div>
-        <div class="entry"><strong>Version:</strong> <span id="os_version">loading...</span></div>
-        <div class="entry"><strong>Kernel:</strong> <span id="kernel">loading...</span></div>
-        <div class="entry"><strong>Uptime:</strong> <span id="uptime">loading...</span></div>
+        <div class="entry"><strong>OS:</strong> <span id="os">loading…</span></div>
+        <div class="entry"><strong>Version:</strong> <span id="os_version">loading…</span></div>
+        <div class="entry"><strong>Kernel:</strong> <span id="kernel">loading…</span></div>
+        <div class="entry"><strong>Uptime:</strong> <span id="uptime">loading…</span></div>
       </div>
-
-      <div class="tile" id="hwenc_info">
+      <div class="card" id="hwenc_info">
         <h3>Hardware Encoders</h3>
-        <div class="entry"><strong>AMD VCE:</strong> <span id="amd_vce">loading...</span></div>
-        <div class="entry"><strong>Intel QSV:</strong> <span id="intel_qsv">loading...</span></div>
-        <div class="entry"><strong>nVidia NVENC:</strong> <span id="nvidia_nvenc">loading...</span></div>
+        <div class="entry"><strong>AMD VCE:</strong> <span id="amd_vce">loading…</span></div>
+        <div class="entry"><strong>Intel QSV:</strong> <span id="intel_qsv">loading…</span></div>
+        <div class="entry"><strong>nVidia NVENC:</strong> <span id="nvidia_nvenc">loading…</span></div>
       </div>
-
-      <div class="tile" id="ram_info">
+      <div class="card" id="ram_info">
         <h3>RAM Info</h3>
-        <div class="entry"><strong>Total:</strong> <span id="ram_total">loading...</span></div>
-        <div class="entry"><strong>Used:</strong> <span id="ram_used">loading...</span></div>
-        <div class="entry"><strong>Usage:</strong> <span id="ram_usage">loading...</span></div>
+        <div class="entry"><strong>Total:</strong> <span id="ram_total">loading…</span></div>
+        <div class="entry"><strong>Used:</strong> <span id="ram_used">loading…</span></div>
+        <div class="entry"><strong>Usage:</strong> <span id="ram_usage">loading…</span></div>
       </div>
-
-      <div class="tile" id="storage_info">
+      <div class="card" id="storage_info">
         <h3>Storage Info</h3>
-        <div class="entry"><strong>Total:</strong> <span id="disk_total">loading...</span></div>
-        <div class="entry"><strong>Used:</strong> <span id="disk_used">loading...</span></div>
-        <div class="entry"><strong>Usage:</strong> <span id="disk_usage">loading...</span></div>
+        <div class="entry"><strong>Total:</strong> <span id="disk_total">loading…</span></div>
+        <div class="entry"><strong>Used:</strong> <span id="disk_used">loading…</span></div>
+        <div class="entry"><strong>Usage:</strong> <span id="disk_usage">loading…</span></div>
       </div>
-
-      <div class="tile" id="cpu_info">
+      <div class="card" id="cpu_info">
         <h3>CPU Info</h3>
-        <div class="entry"><strong id="cpu_model">loading...</strong></div>
-        <div class="entry"><strong>Cores/Threads:</strong> <span id="cpu_cores_threads">loading...</span></div>
-        <div class="entry"><strong>Clock:</strong> <span id="cpu_clock">loading...</span></div>
-        <div class="entry"><strong>Usage:</strong> <span id="cpu_usage">loading...</span></div>
-        <div class="entry"><strong>Temp:</strong> <span id="cpu_temp">loading...</span></div>
+        <div class="entry"><strong id="cpu_model">loading…</strong></div>
+        <div class="entry"><strong>Cores/Threads:</strong> <span id="cpu_cores_threads">loading…</span></div>
+        <div class="entry"><strong>Clock:</strong> <span id="cpu_clock">loading…</span></div>
+        <div class="entry"><strong>Usage:</strong> <span id="cpu_usage">loading…</span></div>
+        <div class="entry"><strong>Temp:</strong> <span id="cpu_temp">loading…</span></div>
       </div>
     </div>
 
     <hr>
 
     <h2>Drive Status</h2>
-    <div class="tile-row" id="drives">
-      <!-- Overview and drive tiles will be injected here -->
-    </div>
+    <div class="grid grid--auto" id="drives"></div>
 
     <hr>
 

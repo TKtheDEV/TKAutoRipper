@@ -5,9 +5,14 @@
   <title>TKAutoRipper Settings</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/gif" href="/static/favicon.gif">
+  <script type="module">
+    import { initTheme, toggleTheme, showToast } from '/static/ui.js';
+    window.toggleTheme = toggleTheme;
+    window.showToast = showToast;
+    document.addEventListener('DOMContentLoaded', initTheme);
+  </script>
 </head>
 <body>
-  <!-- 🔔 Toast Container -->
   <div id="toast"></div>
 
   <header class="header-bar" role="banner" aria-label="Settings Header">
@@ -21,9 +26,9 @@
     </div>
   </header>
 
-  <main class="settings-content" role="main">
+  <main class="content grid grid--auto" role="main">
     {% for section, values in config.items() %}
-      <div class="tile">
+      <div class="card">
         <h2>[{{ section }}]</h2>
         {% for key, meta in values.items() %}
           {% if key.strip() %}
@@ -38,39 +43,39 @@
             {% if meta.type == "boolean" %}
               <div class="input-row">
                 <label class="switch">
-                  <input 
+                  <input
                     type="checkbox"
                     name="bool_toggle"
                     {% if meta.value %}checked{% endif %}
-                    onchange="submitToggle(this, '{{ section }}', '{{ key }}')"
-                  >
+                    onchange="submitToggle(this, '{{ section }}', '{{ key }}')">
                   <span class="slider"></span>
                 </label>
               </div>
+
             {% elif meta.type == "select" and meta.choices %}
               <div class="input-row">
-                <select name="value">
+                <select class="select" name="value">
                   {% for option in meta.choices %}
                     <option value="{{ option }}" {% if option == meta.value %}selected{% endif %}>{{ option }}</option>
                   {% endfor %}
                 </select>
-                <button type="submit">Save</button>
+                <button class="btn btn--primary" type="submit">Save</button>
               </div>
 
             {% elif meta.type in ["string", "path", "integer", "float"] %}
               <div class="input-row">
-                <input type="text" name="value" value="{{ meta.value }}">
-                <button type="submit">Save</button>
+                <input class="input" type="text" name="value" value="{{ meta.value }}">
+                <button class="btn btn--primary" type="submit">Save</button>
               </div>
 
             {% elif meta.type == "list" and meta.value %}
-              <textarea name="value" rows="3">{{ meta.value | join(', ') }}</textarea>
-              <button type="submit">Save</button>
+              <textarea class="input" name="value" rows="3">{{ meta.value | join(', ') }}</textarea>
+              <button class="btn btn--primary" type="submit">Save</button>
 
             {% else %}
               <div class="input-row">
-                <input type="text" name="value" value="{{ meta.value }}">
-                <button type="submit">Save</button>
+                <input class="input" type="text" name="value" value="{{ meta.value }}">
+                <button class="btn btn--primary" type="submit">Save</button>
               </div>
             {% endif %}
           </form>
@@ -81,95 +86,28 @@
   </main>
 
   <script>
-    function getCookie(name) {
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-      return match ? decodeURIComponent(match[2]) : null;
-    }
-
-    function setCookie(name, value, days = 365) {
-      const expires = new Date(Date.now() + days * 864e5).toUTCString();
-      document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
-    }
-
-    function applyTheme(mode) {
-      const icon = document.getElementById('theme-icon');
-      document.documentElement.classList.remove('dark-mode', 'light-mode');
-      document.documentElement.classList.add(`${mode}-mode`);
-      if (icon) icon.textContent = mode === 'dark' ? '🌙' : '☀️';
-    }
-
-    function toggleTheme() {
-      const current = getCookie('theme') || 'light';
-      const next = current === 'light' ? 'dark' : 'light';
-      applyTheme(next);
-      setCookie('theme', next);
-    }
-
-    function showToast(message, type = "success") {
-      const toast = document.getElementById("toast");
-      const wrapper = document.createElement("div");
-      wrapper.classList.add("toast-msg");
-      if (type === "error") wrapper.style.borderLeft = "5px solid red";
-      wrapper.textContent = message;
-      toast.appendChild(wrapper);
-      setTimeout(() => wrapper.classList.add("fade-out"), 3000);
-      setTimeout(() => wrapper.remove(), 4000);
-    }
-
+    // submitSetting / submitToggle carry over from your current file (unchanged API)
     async function submitSetting(event) {
       event.preventDefault();
       const form = event.target;
       const formData = new FormData(form);
       const payload = new URLSearchParams();
-
-      formData.forEach((value, key) => {
-        payload.append(key, value);
-      });
-
-      try {
-        const res = await fetch("/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: payload
-        });
-
+      formData.forEach((v,k)=> payload.append(k,v));
+      try{
+        const res = await fetch("/settings", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body: payload });
         if (!res.ok) throw new Error("Save failed");
         showToast(`Saved ${payload.get("section")}.${payload.get("key")}`);
-      } catch (err) {
-        console.error(err);
-        showToast("Save failed!", "error");
-      }
+      }catch(err){ showToast("Save failed!", "error"); }
     }
-
     async function submitToggle(checkbox, section, key) {
       const value = checkbox.checked ? "true" : "false";
-      const payload = new URLSearchParams();
-      payload.append("section", section);
-      payload.append("key", key);
-      payload.append("value", value);
-
-      try {
-        const res = await fetch("/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: payload
-        });
-
+      const payload = new URLSearchParams({ section, key, value });
+      try{
+        const res = await fetch("/settings", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body: payload });
         if (!res.ok) throw new Error("Toggle failed");
         showToast(`Toggled ${section}.${key}`);
-      } catch (err) {
-        console.error(err);
-        showToast("Toggle failed!", "error");
-      }
+      }catch(err){ showToast("Toggle failed!", "error"); }
     }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      let mode = getCookie('theme');
-      if (!mode) {
-        mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
-      applyTheme(mode);
-    });
   </script>
 </body>
 </html>
