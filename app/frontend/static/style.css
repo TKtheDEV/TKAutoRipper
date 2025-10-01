@@ -131,3 +131,56 @@ label{display:inline-block;margin:.2rem 0;color:var(--muted);font-size:.9rem}
 
 html.light-mode .switch .slider { background: #cfcfcf; }
 html.light-mode .switch input:checked + .slider { background: var(--green); }
+
+/* --- Drive tile: keep eject at bottom-left --- */
+.card--drive { position: relative; padding-bottom: 3.25rem; } /* room for the pinned row */
+.card--drive .eject-row {
+  position: absolute;
+  left: .75rem;
+  bottom: .75rem;
+}
+
+/* Job details layout: strict 50/50 on desktop, stack on mobile */
+body[data-job-id] .job-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  body[data-job-id] .job-layout { grid-template-columns: 1fr; }
+}
+
+/* Left column stacks: Job Info + Output + OMDb */
+body[data-job-id] .left-col { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Keep log from dictating layout */
+body[data-job-id] .log-card #log-window {
+  max-height: 70vh;
+  min-height: 50vh;        /* feels nicer; adjust if you want */
+  overflow: auto;
+}
+
+
+/* Force true 50/50 columns and allow shrinking */
+body[data-job-id] .job-layout {
+  display: grid;
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); /* <-- key fix */
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Let grid items actually shrink (pre/log won’t push layout) */
+body[data-job-id] .left-col,
+body[data-job-id] .log-card {
+  min-width: 0; /* <-- critical for overflow content like <pre> */
+}
+
+/* Keep log scrolling inside the card instead of growing the grid */
+body[data-job-id] .log-card #log-window {
+  max-height: 70vh;
+  min-height: 50vh;
+  overflow: auto;       /* both axes scroll as needed */
+  white-space: pre;     /* keep columns, don't wrap */
+  width: 100%;
+}

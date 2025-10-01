@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import List, Tuple
 
 from app.core.configmanager import config
-from app.core.integration.dd.linux import build_iso_dump_cmd
-from app.core.integration.zstd.linux import build_zstd_cmd
+from app.core.integration.dd.linux import build_iso_dump_cmd  # 
+from app.core.integration.zstd.linux import build_zstd_cmd     # 
 from app.core.job.job import Job
 
 # Step can optionally include a 5th element: dest Path
@@ -12,12 +12,32 @@ Step = Tuple[List[str], str, bool] \
     | Tuple[List[str], str, bool, float] \
     | Tuple[List[str], str, bool, float, Path]
 
+def _unique_path(p: Path) -> Path:
+    """
+    Return a path that doesn't exist by adding ' (1)', ' (2)', ... before the full suffix.
+    Works for multi-suffix like .iso.zst  ->  name (1).iso.zst
+    """
+    if not p.exists():
+        return p
+    stem = p.name
+    # Split into base and full suffix chain
+    suffixes = "".join(p.suffixes)
+    base = p.name[: len(p.name) - len(suffixes)] if suffixes else p.stem
+    n = 1
+    while True:
+        candidate = p.with_name(f"{base} ({n}){suffixes}")
+        if not candidate.exists():
+            return candidate
+        n += 1
+
 def rip_generic_disc(job: Job) -> List[Step]:
     """
     ISO dump (drive needed) then optional compression.
     Steps:
       1) dd → temp ISO (drive released afterwards)
       2) compress/copy → final destination (dest provided)
+         - If user provided override_filename, use it exactly (no auto-rename).
+         - Otherwise auto-rename to ' (1)', ' (2)', ... if a collision exists.
     """
     cfg = config.section("OTHER")
     use_comp = cfg.get("usecompression", True)
@@ -32,16 +52,25 @@ def rip_generic_disc(job: Job) -> List[Step]:
 
     if job.override_filename:
         # user supplied full file name for ROM: parent is output_dir, name is override
-        target = out_dir / job.override_filename
+        final_base = out_dir / job.override_filename
+        # honor override exactly (no auto-rename). Tools use -f where applicable.
+        target_iso = final_base if final_base.suffix else final_base.with_suffix(".iso")
+        auto_rename = False
     else:
-        target = out_dir / f"{job.disc_label}.iso"
+        target_iso = out_dir / f"{job.disc_label}.iso"
+        # auto-rename if exists
+        target_iso = _unique_path(target_iso)
+        auto_rename = True
 
     steps: List[Step] = [
         (build_iso_dump_cmd(job.drive, iso_path), "Creating ISO image", True)
     ]
 
     if use_comp and comp_alg == "zstd":
-        out_zst = target if str(target).endswith(".zst") else target.with_suffix(target.suffix + ".zst")
+        out_zst = target_iso if str(target_iso).endswith(".zst") else target_iso.with_suffix(target_iso.suffix + ".zst")
+        # If auto-rename mode, ensure compressed name is also unique
+        if auto_rename:
+            out_zst = _unique_path(out_zst)
         steps.append(
             (build_zstd_cmd(iso_path, out_zst),
              "Compressing ISO (zstd)",
@@ -50,7 +79,9 @@ def rip_generic_disc(job: Job) -> List[Step]:
              out_zst)
         )
     elif use_comp and comp_alg in {"bz2", "bzip2"}:
-        out_bz2 = target if str(target).endswith(".bz2") else target.with_suffix(target.suffix + ".bz2")
+        out_bz2 = target_iso if str(target_iso).endswith(".bz2") else target_iso.with_suffix(target_iso.suffix + ".bz2")
+        if auto_rename:
+            out_bz2 = _unique_path(out_bz2)
         steps.append(
             (["bzip2", "-v", "-k", "-f", str(iso_path)],
              "Compressing ISO (bzip2)",
@@ -59,12 +90,15 @@ def rip_generic_disc(job: Job) -> List[Step]:
              out_bz2)
         )
     else:
+        final = target_iso if auto_rename else target_iso
+        if auto_rename:
+            final = _unique_path(final)
         steps.append(
-            (["cp", "-f", str(iso_path), str(target)],
+            (["cp", "-f", str(iso_path), str(final)],
              "Copying ISO to final destination",
              False,
              0.5,
-             target)
+             final)
         )
 
     return steps

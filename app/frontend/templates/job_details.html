@@ -6,26 +6,16 @@
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/gif" href="/static/favicon.gif" />
   <script type="module" src="/static/job_details.js" defer></script>
-  <script type="module">
-    import { initTheme, toggleTheme } from '/static/ui.js';
-    window.toggleTheme = toggleTheme;
-    document.addEventListener('DOMContentLoaded', initTheme);
-  </script>
-  <style>
-    .dropdown{position:absolute;z-index:20;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.25rem 0;max-height:240px;overflow-y:auto;list-style:none;margin:.25rem 0 0 0}
-    .dropdown li{padding:.5rem .75rem;cursor:pointer}
-    .dropdown li:hover{background:var(--hover)}
-  </style>
 </head>
 <body
   data-job-id="{{ job.job_id }}"
   data-disc-type="{{ job.disc_type }}"
   data-disc-label="{{ job.disc_label }}"
-  data-drive-path="{{ job.drive_path|default('', true) }}"
+  data-drive-path="{{ job.drive|default('', true) }}"
 >
   <div id="toast"></div>
 
-  <header class="header-bar" role="banner" aria-label="Job Header">
+  <header class="header-bar">
     <div class="title-left">
       <a href="/" style="color:white;">⬅️ Back</a>
       <h1 style="margin-left:1rem;">Job {{ job.job_id }}</h1>
@@ -36,39 +26,41 @@
     </div>
   </header>
 
-  <main class="content" role="main">
+  <main class="content">
     <div class="job-layout">
-      <!-- LEFT -->
-      <div class="card sticky" id="job-meta">
-        <h2>Job Info</h2>
-        <p class="entry"><strong>Disc:</strong> <span id="disc-label">{{ job.disc_label }}</span> (<span id="disc-type">{{ job.disc_type }}</span>)</p>
-        <p class="entry drive-line" id="drive-line" style="display:none;"><strong>Drive:</strong> <span id="drive-path"></span></p>
-        <p class="entry"><strong>Status:</strong> <span id="job-status">{{ job.status }}</span></p>
-        <p class="entry"><strong>Current step:</strong> <span id="job-step">{{ job.step_description }}</span></p>
 
-        <label class="progress-label" for="overall-pct"><strong>Total</strong><span id="overall-pct-label" class="progress-value">{{ job.progress }}%</span></label>
-        <progress id="overall-pct" class="progress" max="100" value="{{ job.progress }}"></progress>
+      <!-- LEFT COLUMN -->
+      <div class="left-col">
+        <!-- Job Info -->
+        <div class="card" id="job-meta">
+          <h2>Job Info</h2>
+          <p class="entry"><strong>Disc:</strong> {{ job.disc_label }} ({{ job.disc_type }})</p>
+          <p class="entry"><strong>Status:</strong> <span id="job-status">{{ job.status }}</span></p>
+          <p class="entry"><strong>Current step:</strong> <span id="job-step">{{ job.step_description }}</span></p>
 
-        <label id="step-label" class="progress-label" for="step-pct" style="display:none;">
-          <strong>Step</strong> <span id="step-index" class="muted"></span>
-          <span id="step-pct-label" class="progress-value">{{ job.step_progress or 0 }}%</span>
-        </label>
-        <progress id="step-pct" class="progress progress--blue" max="100" value="{{ job.step_progress or 0 }}" style="display:none;"></progress>
+          <label class="progress-label" for="overall-pct">
+            <strong>Total</strong> <span id="overall-pct-label" class="progress-value">{{ job.progress }}%</span>
+          </label>
+          <progress id="overall-pct" class="progress" max="100" value="{{ job.progress }}"></progress>
 
-        <label id="title-label" class="progress-label" for="title-pct" style="display:none;">
-          <strong>Title</strong><span id="title-pct-label" class="progress-value">0%</span>
-        </label>
-        <progress id="title-pct" class="progress progress--yellow" max="100" value="0" style="display:none;"></progress>
+          <label id="step-label" class="progress-label" for="step-pct" style="display:none;">
+            <strong>Step</strong> <span id="step-pct-label" class="progress-value">{{ job.step_progress or 0 }}%</span>
+          </label>
+          <progress id="step-pct" class="progress progress--blue" max="100" value="{{ job.step_progress or 0 }}" style="display:none;"></progress>
 
-        <div class="btn-row" style="margin-top:.6rem;">
-          <button id="resume-btn" class="btn btn--ghost" style="display:none">▶️ Resume</button>
-          <button id="cancel-btn" class="btn btn--danger">⏸ Cancel</button>
-          <button id="delete-btn" class="btn btn--danger">🗑 Delete</button>
+          <label id="title-label" class="progress-label" for="title-pct" style="display:none;">
+            <strong>Title</strong> <span id="title-pct-label" class="progress-value">0%</span>
+          </label>
+          <progress id="title-pct" class="progress progress--yellow" max="100" value="0" style="display:none;"></progress>
+
+          <div class="btn-row" style="margin-top:.6rem;">
+            <button id="retry-btn" class="btn btn--primary" style="display:none">↻ Retry</button>
+            <button id="cancel-btn" class="btn btn--danger">⛔ Cancel</button>
+            <button id="delete-btn" class="btn btn--danger" style="display:none">🗑 Delete</button>
+          </div>
         </div>
-      </div>
 
-      <div class="grid grid--2">
-        <!-- Output -->
+        <!-- Output Location -->
         <div class="card" id="output-wrap">
           <h3>Output Location</h3>
           <form id="output-form">
@@ -80,13 +72,14 @@
           </form>
         </div>
 
-        <!-- OMDb (only for DVD/BLURAY video) -->
+        <!-- OMDb (only for video discs) -->
         {% set disc_lower = (job.disc_type or '')|lower %}
         {% if disc_lower in ['dvd_video', 'bluray_video'] %}
         <div class="card" id="omdb-wrap">
           <h3>Metadata (OMDb)</h3>
+
           <div class="input-row">
-            <div style="flex:1;position:relative;min-width:0;">
+            <div style="flex:1; position:relative; min-width:0;">
               <label for="omdb-query">Title</label>
               <input id="omdb-query" class="input" type="text" autocomplete="off" placeholder="Search title…">
               <ul id="omdb-results" class="dropdown" style="display:none;"></ul>
@@ -96,33 +89,37 @@
               <input id="omdb-season" class="input" type="number" min="1" step="1" placeholder="e.g. 5" disabled>
             </div>
           </div>
+
           <div class="input-row">
             <div style="flex:1; min-width:0;">
               <label for="omdb-imdbid">IMDb ID</label>
               <input id="omdb-imdbid" class="input" type="text" placeholder="e.g. tt0083866">
             </div>
           </div>
+
           <form id="omdb-form">
             <div class="btn-row">
               <button id="omdb-apply" type="submit" class="btn btn--primary" disabled>Apply</button>
             </div>
           </form>
-          <div id="omdb-picked" class="omdb-picked" style="margin-top:0.5rem; display:none;"></div>
+
+          <div id="omdb-picked" class="omdb-picked" style="margin-top:.5rem; display:none;"></div>
         </div>
         {% endif %}
-
-        <!-- Log -->
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
-            <h3>Live Log</h3>
-            <div class="input-row">
-              <label><input type="checkbox" id="autoscroll" checked> Auto-scroll</label>
-              <a id="download-log" href="#" download class="btn btn--ghost">📄 Full log</a>
-            </div>
-          </div>
-          <pre id="log-window" class="log-box"></pre>
-        </div>
       </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="card log-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3>Live Log</h3>
+          <div class="input-row">
+            <label><input type="checkbox" id="autoscroll" checked> Auto-scroll</label>
+            <a id="download-log" href="#" download class="btn btn--ghost">📄 Full log</a>
+          </div>
+        </div>
+        <pre id="log-window" class="log-box"></pre>
+      </div>
+
     </div>
   </main>
 </body>

@@ -1,3 +1,5 @@
+# app/api/drives.py
+
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
@@ -5,6 +7,7 @@ from pathlib import Path
 from pydantic import BaseModel
 import subprocess
 import logging
+from typing import Optional, List
 
 from ..core.configmanager import config
 from ..core.auth import verify_web_auth
@@ -32,30 +35,60 @@ def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
 
 @router.post("/api/drives/insert", dependencies=[Depends(verify_auth)])
 def insert_drive(payload: dict):
+    """
+    Called by disc detection when a disc is inserted.
+    Creates a Job with the correct output root based on disc_type:
+      dvd_video   -> [DVD].outputdirectory
+      bluray_video-> [BLURAY].outputdirectory
+      cd_audio    -> [CD].outputdirectory  (abcde still owns layout on Linux)
+      *_rom/other -> [OTHER].outputdirectory (ISO)
+    """
     drive = payload.get("drive")
-    disc_type = payload.get("disc_type")
+    disc_type = (payload.get("disc_type") or "").lower()
     disc_label = payload.get("disc_label")
 
     if not all([drive, disc_type, disc_label]):
         raise HTTPException(status_code=400, detail="Missing required fields")
 
+    # Ensure drive exists in tracker
     if not drive_tracker.get_drive(drive):
         drive_tracker.register_drive(drive, model="Unknown", capability=["Unknown"])
 
-    if not drive_tracker.get_drive(drive).is_available:
+    # If drive is busy, do not create a new job
+    drv = drive_tracker.get_drive(drive)
+    if drv and not drv.is_available:
         return {"status": "Drive in use, skipping job creation"}
 
+    # Resolve temp and output directories
     temp_dir = Path(config.get("General", "tempdirectory")).expanduser()
-    output_base = config.get(disc_type.upper(), "outputdirectory") or config.get("OTHER", "outputdirectory")
-    output_dir = Path(output_base).expanduser() / disc_label
 
+    # Map API disc types to config sections (fixes the ISO fallback for video discs)
+    section_map = {
+        "dvd_video": "DVD",
+        "bluray_video": "BLURAY",
+        "cd_audio": "CD",
+        # ROM/unknown types use OTHER (ISO)
+        "dvd_rom": "OTHER",
+        "bluray_rom": "OTHER",
+        "cd_rom": "OTHER",
+        "other_disc": "OTHER",
+    }
+    cfg_section = section_map.get(disc_type, "OTHER")
+
+    output_base = (
+        config.get(cfg_section, "outputdirectory")
+        or config.get("OTHER", "outputdirectory")
+    )
+    output_dir = Path(str(output_base)).expanduser() / disc_label
+
+    # Create job and start runner
     job = job_tracker.create_job(
         disc_type=disc_type,
         drive=drive,
         disc_label=disc_label,
         temp_dir=temp_dir,
         output_dir=output_dir,
-        steps_total=1  # placeholder; real runner may update this
+        steps_total=1  # placeholder; the runner may adjust the effective step count
     )
     drive_tracker.assign_job(drive, job.job_id)
 
@@ -97,8 +130,10 @@ def list_drives():
         for d in drive_tracker.get_all_drives()
     ]
 
+
 class DriveEjectRequest(BaseModel):
     path: str
+
 
 @router.post("/api/drives/eject", dependencies=[Depends(verify_web_auth)])
 def eject_drive(request: DriveEjectRequest):
