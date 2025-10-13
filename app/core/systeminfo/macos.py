@@ -1,45 +1,37 @@
 import platform
 import psutil
+import re
+import subprocess
 import time
 from typing import Dict, Any
 from ..configmanager import config
 from ..integration.handbrake import macos as handbrake
 
-#def get_system_info() -> Dict[str, Any]:
-#    return {
-#        "os_info": _get_os_info(),
-#        "cpu_info": _get_cpu_info(),
-#        "memory_info": _get_memory(),
-#        "storage_info": _get_storage(),
-#        "gpu_info": lact.get_gpu_info(),
-#        "hwenc_info": handbrake.get_available_hw_encoders()
-#    }
-
 def get_system_info() -> Dict[str, Any]:
     return {
-        "os_info": "not available",
-        "cpu_info": "not available",
+        "os_info": _get_os_info(),
+        "cpu_info": _get_cpu_info(),
         "memory_info": _get_memory(),
         "storage_info": _get_storage(),
         "gpu_info": "not available",
         "hwenc_info": handbrake.get_available_hw_encoders(),
     }
 
-
 def _get_os_info() -> Dict:
-    try:
-        with open("/etc/os-release", "r") as f:
-            os_release = f.readlines()
-            os_version = next((line.split("=")[1].strip().strip('"') for line in os_release if line.startswith("VERSION=")), platform.version())
-    except FileNotFoundError:
-        os_version = platform.version()
-
-    return {
-        "os": platform.system(),
-#        "os_version": os_version,
-        "kernel": platform.release(),
-        "uptime": _format_uptime(psutil.boot_time())
-    }
+        output = subprocess.check_output(["sw_vers"]).decode()
+        lines = {}
+        for line in output.strip().split("\n"):
+            key_value = re.split(r":\s+", line, maxsplit=1)
+            if len(key_value) == 2:
+                key, value = key_value
+                lines[key.strip()] = value.strip()
+        
+        return {
+            "os": lines.get("ProductName", "N/A"),
+            "os_version": lines.get("ProductVersion", "N/A"),
+            "kernel": platform.release(),
+            "uptime": _format_uptime(psutil.boot_time())
+        }
 
 
 def _format_uptime(boot_time: float) -> str:
@@ -52,24 +44,17 @@ def _format_uptime(boot_time: float) -> str:
 
 def _get_cpu_info() -> Dict:
     try:
-        with open("/proc/cpuinfo", "r") as f:
-            model = next((line.split(": ")[1].strip() for line in f if line.startswith("model name")), platform.processor())
+        model = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode().strip()
     except FileNotFoundError:
         model = platform.processor()
-
-    try:
-        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-            temp = int(f.read().strip()) / 1000.0
-    except:
-        temp = "N/A"
-
+ 
     return {
         "model": model,
         "cores": psutil.cpu_count(logical=False),
         "threads": psutil.cpu_count(logical=True),
         "frequency": int(psutil.cpu_freq().current),
         "usage": psutil.cpu_percent(interval=1),
-        "temperature": temp
+        "temperature": "N/A"
     }
 
 
