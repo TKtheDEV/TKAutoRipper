@@ -2,6 +2,7 @@ config/cert.pem
 config/key.pem
 output/
 temp/
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

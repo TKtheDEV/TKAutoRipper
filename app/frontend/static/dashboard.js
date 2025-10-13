@@ -48,6 +48,7 @@ function updateSystemInfo(){
 
     const vendors = data.hwenc_info?.vendors || {};
     setHTML('amd_vce', renderHWEnc(vendors.vce));
+    setHTML('apple_vt', renderHWEnc(vendors.vt));
     setHTML('intel_qsv', renderHWEnc(vendors.qsv));
     setHTML('nvidia_nvenc', renderHWEnc(vendors.nvenc));
 
