@@ -24,14 +24,16 @@ def get_available_hw_encoders():
         encoders = {
             "nvenc": extract_codecs(all_encoders, "nvenc_"),
             "qsv": extract_codecs(all_encoders, "qsv_"),
-            "vce": extract_codecs(all_encoders, "vce_")
+            "vce": extract_codecs(all_encoders, "vce_"),
+            "vt": extract_codecs(all_encoders, "vt_")
         }
 
         return {
             "vendors": {
                 "nvenc": {"label": "NVIDIA NVENC", "available": bool(encoders["nvenc"]), "codecs": encoders["nvenc"]},
                 "qsv": {"label": "Intel QSV", "available": bool(encoders["qsv"]), "codecs": encoders["qsv"]},
-                "vce": {"label": "AMD VCE", "available": bool(encoders["vce"]), "codecs": encoders["vce"]}
+                "vce": {"label": "AMD VCE", "available": bool(encoders["vce"]), "codecs": encoders["vce"]},
+                "vt": {"label": "Apple VT", "available": bool(encoders["vt"]), "codecs": encoders["vt"]}
             }
         }
 
@@ -40,7 +42,8 @@ def get_available_hw_encoders():
             "vendors": {
                 "nvenc": {"label": "NVIDIA NVENC", "available": False, "codecs": []},
                 "qsv": {"label": "Intel QSV", "available": False, "codecs": []},
-                "vce": {"label": "AMD VCE", "available": False, "codecs": []}
+                "vce": {"label": "AMD VCE", "available": False, "codecs": []},
+                "vt": {"label": "Apple VT", "available": False, "codecs": []}
             }
         }
 
