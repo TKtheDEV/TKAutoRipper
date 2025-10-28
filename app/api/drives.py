@@ -14,6 +14,7 @@ from ..core.auth import verify_web_auth
 from ..core.job.tracker import job_tracker
 from ..core.drive.manager import drive_tracker
 from ..core.job.runner import JobRunner
+from ..core.job.job import sanitize_folder
 
 router = APIRouter()
 security = HTTPBasic()
@@ -62,7 +63,7 @@ def insert_drive(payload: dict):
     # Resolve temp and output directories
     temp_dir = Path(config.get("General", "tempdirectory")).expanduser()
 
-    # Map API disc types to config sections (fixes the ISO fallback for video discs)
+    # Map API disc types to config sections
     section_map = {
         "dvd_video": "DVD",
         "bluray_video": "BLURAY",
@@ -79,7 +80,8 @@ def insert_drive(payload: dict):
         config.get(cfg_section, "outputdirectory")
         or config.get("OTHER", "outputdirectory")
     )
-    output_dir = Path(str(output_base)).expanduser() / disc_label
+    safe_label = sanitize_folder(disc_label or "DISC")
+    output_dir = Path(str(output_base)).expanduser() / safe_label
 
     # Create job and start runner
     job = job_tracker.create_job(

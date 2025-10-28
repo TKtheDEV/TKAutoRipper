@@ -1,7 +1,10 @@
 # app/api/ws_log.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
+import base64
+
 from app.core.job.tracker import job_tracker
+from app.core.configmanager import config
 
 router = APIRouter()
 TERMINAL = {"Finished", "Failed", "Cancelled"}
@@ -20,8 +23,29 @@ def snapshot(job):
         "output_path": str(getattr(job, "output_path", "")),
     }
 
+def _ws_basic_auth_ok(ws: WebSocket) -> bool:
+    auth = ws.headers.get("authorization") or ws.headers.get("Authorization") or ""
+    try:
+        kind, b64 = auth.split(" ", 1)
+        if kind.lower() != "basic":
+            return False
+        userpass = base64.b64decode(b64.strip()).decode("utf-8", "ignore")
+        username, password = userpass.split(":", 1)
+        return (
+            username == str(config.get("auth", "username")) and
+            password == str(config.get("auth", "password"))
+        )
+    except Exception:
+        return False
+
 @router.websocket("/ws/jobs/{job_id}")
 async def job_ws(ws: WebSocket, job_id: str):
+    # Enforce Basic Auth for WebSocket too (HTTPS assumed)
+    if not _ws_basic_auth_ok(ws):
+        # 1008: Policy Violation
+        await ws.close(code=1008)
+        return
+
     await ws.accept()
     job = job_tracker.get_job(job_id)
     if not job:

@@ -111,7 +111,7 @@ def _other_root() -> Path:
     return Path(str(base)).expanduser()
 
 def _proposed_rom_path(job) -> Path:
-    from app.core.job.job import sanitize_folder  # you already have a sanitizer
+    from app.core.job.job import sanitize_folder
     name = sanitize_folder(getattr(job, "disc_label", None) or "DISC")
     base_dir = _other_root() / name
     other_cfg = config.section("OTHER")
@@ -211,13 +211,15 @@ def set_output(job_id: str, payload: dict = Body(...)):
 @router.post("/api/jobs/{job_id}/retry", dependencies=[Depends(verify_web_auth)])
 def retry_job(job_id: str):
     """
-    Retry allowed iff numeric step_index >= 2 (beyond ripping).
+    Retry allowed iff numeric step >= 2 (beyond ripping).
     Spawns a runner that continues from the step AFTER the last successful one.
     """
     job = job_tracker.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
-    step_index = int(getattr(job, "step_index", 1) or 1)
+
+    # FIX: use the actual 'step' field (there is no 'step_index')
+    step_index = int(getattr(job, "step", 1) or 1)
     if step_index < 2:
         raise HTTPException(409, "Job is not retryable (step_index < 2)")
     if getattr(job, "runner", None) and job.status.lower() in ("running", "ripping", "queued"):
@@ -227,7 +229,6 @@ def retry_job(job_id: str):
     runner = JobRunner(job)
     job.runner = runner
 
-    # Fire & forget according to your worker model
     import threading
     threading.Thread(target=runner.retry_from_last, daemon=True).start()
     return {"status": "queued", "from_step": step_index + 1}
@@ -308,3 +309,4 @@ async def set_job_imdb(job_id: str, imdbID: str = Query(...), season: int | None
         "output_path": str(job.output_path),
         "imdb_id": job.imdb_id,
     }
+    
