@@ -1,8 +1,9 @@
+# app/core/drive/detector/linux.py
 import os
 import time
 import subprocess
 from typing import List, Optional
-from app.core.drive.manager import drive_tracker  # ← local relative import
+from app.core.drive.manager import drive_tracker
 from app.core.job.tracker import job_tracker
 
 def _get_drive_model(dev: str) -> str:

@@ -12,7 +12,7 @@ class DriveTracker:
 
     def register_drive(self, path: str, model: str, capability: List[str], disc_label: Optional[str] = None) -> Drive:
         with self.lock:
-            drive = Drive(path=path, model=model, capability=capability or ["Unknown"], disc_label=disc_label)
+            drive = Drive(path=path, model=model, capability=capability, disc_label=disc_label)
             self.drives[path] = drive
             return drive
 

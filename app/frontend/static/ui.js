@@ -1,3 +1,4 @@
+//ui.js
 // Theme + toasts + fetch util — shared across pages
 
 export function getCookie(name){
@@ -26,8 +27,22 @@ export function toggleTheme(){
   applyTheme(next);
 }
 
+
+export function showToast(message, type = "success") {
+  const toast = document.getElementById("toast");
+  const wrapper = document.createElement("div");
+  wrapper.classList.add("toast-msg");
+  if (type === "error") wrapper.style.borderLeft = "5px solid red";
+  wrapper.textContent = message;
+  toast.appendChild(wrapper);
+  
+  setTimeout(() => wrapper.classList.add("fade-out"), 3000);
+  setTimeout(() => wrapper.remove(), 4000);
+}
+
+
 // Toasts
-export function showToast(message, type='success'){
+/*export function showToast(message, type='success'){
   const toast = document.getElementById('toast');
   if (!toast) return;
   const el = document.createElement('div');
@@ -36,7 +51,7 @@ export function showToast(message, type='success'){
   toast.appendChild(el);
   setTimeout(()=>el.classList.add('fade-out'), 3000);
   setTimeout(()=>el.remove(), 4000);
-}
+}*/
 
 // Fetch JSON helper
 export async function fetchJSON(url, options={}){

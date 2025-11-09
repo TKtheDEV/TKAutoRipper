@@ -17,8 +17,6 @@ def snapshot(job):
         "title_progress": getattr(job, "title_progress", 0),
         "status": getattr(job, "status", "Unknown"),
         "step": getattr(job, "step_description", ""),
-        "waiting_for_rename": bool(getattr(job, "waiting_for_rename", False)),
-        "proposed_output": getattr(job, "proposed_output", None),
         "output_locked": getattr(job, "output_locked", False),
         "output_path": str(getattr(job, "output_path", "")),
     }
@@ -40,9 +38,7 @@ def _ws_basic_auth_ok(ws: WebSocket) -> bool:
 
 @router.websocket("/ws/jobs/{job_id}")
 async def job_ws(ws: WebSocket, job_id: str):
-    # Enforce Basic Auth for WebSocket too (HTTPS assumed)
     if not _ws_basic_auth_ok(ws):
-        # 1008: Policy Violation
         await ws.close(code=1008)
         return
 

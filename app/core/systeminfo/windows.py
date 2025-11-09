@@ -1,3 +1,4 @@
+# systeminfo windows
 import os
 import platform
 import psutil
@@ -5,9 +6,8 @@ import cpuinfo
 import time
 from typing import Dict, Any
 
-# from ..configmanager import config   # Uncomment if needed
 from ..integration.handbrake import windows as handbrake
-# from ..integration.lact import windows as lact
+
 
 
 def get_system_info() -> Dict[str, Any]:
@@ -16,7 +16,7 @@ def get_system_info() -> Dict[str, Any]:
         "cpu_info": _get_cpu_info(),
         "memory_info": _get_memory(),
         "storage_info": _get_storage(),
-        "gpu_info": _get_gpu_info(),  # Replace with lact.get_gpu_info()
+        "gpu_info": _get_gpu_info(),
         "hwenc_info": handbrake.get_available_hw_encoders()
     }
 
@@ -39,7 +39,7 @@ def _format_uptime(boot_time: float) -> str:
 
 
 def _get_cpu_info() -> Dict:
-    temp = "N/A"  # Windows temperature requires WMI or third-party libs
+    temp = "Unsupported"  # Windows temperature requires WMI or third-party libs
 
     return {
         "model": cpuinfo.get_cpu_info()["brand_raw"],

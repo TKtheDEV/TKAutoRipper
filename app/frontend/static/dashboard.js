@@ -1,3 +1,4 @@
+//dashboard.js
 import { fetchJSON, showToast, on } from './ui.js';
 
 // ====== System Info ======

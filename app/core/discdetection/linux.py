@@ -1,9 +1,11 @@
+# app/core/discdetection/linux.py
 import subprocess
 import os
 import time
 import logging
 from pathlib import Path
-from ..api_helpers import post_api  # Local helper for HTTPS
+
+from ..api_helpers import post_api
 from ..configmanager import config
 
 

@@ -10,6 +10,7 @@ from app.core.templates import templates
 from app.core.configmanager import config
 from app.core.job.tracker import job_tracker
 from app.core.job.runner import JobRunner
+from app.core.integration.omdbapi import helper
 
 router = APIRouter()
 
@@ -70,7 +71,6 @@ def delete_job(job_id: str):
         except Exception:
             pass
 
-    # If you have drive-tracking, release here (safe no-op when absent)
     try:
         from app.core.drive.manager import drive_tracker
         if getattr(job, "drive", None):
@@ -133,15 +133,8 @@ def get_output(job_id: str):
 
     payload = {
         "output_path": str(job.output_path),
-        "override_filename": getattr(job, "override_filename", None),
         "locked": bool(getattr(job, "output_locked", False)),
     }
-
-    # Proposed file path logic remains only for ROM/OTHER discs
-    if dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}:
-        proposed = _proposed_rom_path(job)
-        payload["proposed_path"] = str(proposed)
-        payload["duplicate"] = proposed.exists()
 
     return payload
 
@@ -171,8 +164,7 @@ def set_output(job_id: str, payload: dict = Body(...)):
             raise HTTPException(status_code=400, detail="For video/audio discs, output must be a folder (no filename).")
         p.mkdir(parents=True, exist_ok=True)
         job.output_path = p
-        job.override_filename = None
-        return {"status": "ok", "output_path": str(job.output_path), "override_filename": None, "type": dtype}
+        return {"status": "ok", "output_path": str(job.output_path), "type": dtype}
 
     # ROM & other must be a final file path
     if dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}:
@@ -192,16 +184,14 @@ def set_output(job_id: str, payload: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Invalid extension. Allowed: {sorted(allowed)}")
         p.parent.mkdir(parents=True, exist_ok=True)
         job.output_path = p.parent
-        job.override_filename = p.name
-        return {"status": "ok", "output_path": str(job.output_path), "override_filename": job.override_filename, "type": dtype}
+        return {"status": "ok", "output_path": str(job.output_path), "type": dtype}
 
     # Fallback → treat as folder
     if p.suffix:
         raise HTTPException(status_code=400, detail="Output must be a folder for this disc type.")
     p.mkdir(parents=True, exist_ok=True)
     job.output_path = p
-    job.override_filename = None
-    return {"status": "ok", "output_path": str(job.output_path), "override_filename": None, "type": dtype}
+    return {"status": "ok", "output_path": str(job.output_path), "type": dtype}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

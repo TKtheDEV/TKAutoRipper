@@ -1,3 +1,4 @@
+# main.py
 from fastapi import FastAPI, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,8 +16,8 @@ from app.api import settings
 from app.api import systeminfo
 from app.api import ws_log
 from app.core.auth import verify_web_auth
-from app.core.discdetection import linux as discdetection
-from app.core.drive.detector import linux as drive_detector
+import app.core.discdetection as discdetection
+import app.core.drive.detector as drive_detector
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)

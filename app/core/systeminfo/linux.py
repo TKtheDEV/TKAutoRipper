@@ -1,3 +1,4 @@
+# systeminfo/linux.py
 import platform
 import psutil
 import time
@@ -54,7 +55,7 @@ def _get_cpu_info() -> Dict:
         with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
             temp = int(f.read().strip()) / 1000.0
     except:
-        temp = "N/A"
+        temp = "Not supported"
 
     return {
         "model": model,

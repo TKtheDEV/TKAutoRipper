@@ -37,7 +37,7 @@ class Job:
     drive: str
     disc_label: str
     temp_path: Path
-    output_path: Path              # usually a directory; for ROM jobs we also use override_filename
+    output_path: Path
     steps_total: int = 1
 
     # runtime status
@@ -51,11 +51,6 @@ class Job:
 
     # output control
     output_locked: bool = False                    # set True right before final write step starts
-    override_filename: Optional[str] = None        # ROM jobs: user-supplied final file name
-
-    # rename flow flags (used by UI/WS)
-    waiting_for_rename: bool = False
-    proposed_output: Optional[str] = None
 
     # metadata
     imdb_id: Optional[str] = None
@@ -103,7 +98,6 @@ class Job:
             "step": int(self.step or 1),
             "step_description": self.step_description,
             "output_path": str(self.output_path),
-            "override_filename": self.override_filename,
             "timestamp": int(time.time()),
         }
         if extra:
@@ -121,7 +115,6 @@ class Job:
         op = data.get("output_path")
         if op:
             self.output_path = Path(op)
-        self.override_filename = data.get("override_filename", self.override_filename)
 
     # ── API surface for templates/UI ─────────────────────────
     def to_dict(self) -> dict:
@@ -132,13 +125,10 @@ class Job:
             "disc_label": self.disc_label,
             "temp_path": str(self.temp_path),
             "output_path": str(self.output_path),
-            "override_filename": self.override_filename,
             "output_locked": self.output_locked,
-            "waiting_for_rename": self.waiting_for_rename,
-            "proposed_output": self.proposed_output,
             "start_time": self.start_time,
             "steps_total": self.steps_total,
-            "step": self.step,                              # ← numeric step for “>= 2” checks
+            "step": self.step,
             "step_description": self.step_description,
             "step_progress": self.step_progress,
             "title_progress": self.title_progress,
@@ -149,38 +139,3 @@ class Job:
             "metadata": self.metadata,
             "season": self.season,
         }
-
-    # --- Jellyfin/Kodi NFO writer (kept as-is) ---
-    def write_jellyfin_nfo(self, target_dir: Path) -> None:
-        meta = self.metadata or {}
-        title = str(meta.get("Title") or "").strip()
-        year  = str(meta.get("Year") or "").strip()
-        typ   = (meta.get("Type") or "").lower()
-        imdb  = self.imdb_id or str(meta.get("imdbID") or "").strip()
-        if not title:
-            return
-        if typ == "series":
-            series_root = target_dir
-            if series_root.name.lower().startswith("season "):
-                series_root = series_root.parent
-            root = ET.Element("tvshow")
-            ET.SubElement(root, "title").text = title
-            if year:
-                ET.SubElement(root, "year").text = year
-            if imdb:
-                uid = ET.SubElement(root, "uniqueid")
-                uid.set("type", "imdb")
-                uid.set("default", "true")
-                uid.text = imdb
-            _write_xml(series_root / "tvshow.nfo", root)
-        else:
-            root = ET.Element("movie")
-            ET.SubElement(root, "title").text = title
-            if year:
-                ET.SubElement(root, "year").text = year
-            if imdb:
-                uid = ET.SubElement(root, "uniqueid")
-                uid.set("type", "imdb")
-                uid.set("default", "true")
-                uid.text = imdb
-            _write_xml(target_dir / "movie.nfo", root)

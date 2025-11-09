@@ -1,5 +1,7 @@
+# app/api/systeminfo.py
 from fastapi import APIRouter, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
 from app.core.auth import verify_web_auth
 from app.core.systeminfo import get_system_info
 

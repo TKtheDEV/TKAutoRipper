@@ -50,17 +50,9 @@ def rip_generic_disc(job: Job) -> List[Step]:
     out_dir: Path = job.output_path
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if job.override_filename:
-        # user supplied full file name for ROM: parent is output_dir, name is override
-        final_base = out_dir / job.override_filename
-        # honor override exactly (no auto-rename). Tools use -f where applicable.
-        target_iso = final_base if final_base.suffix else final_base.with_suffix(".iso")
-        auto_rename = False
-    else:
-        target_iso = out_dir / f"{job.disc_label}.iso"
-        # auto-rename if exists
-        target_iso = _unique_path(target_iso)
-        auto_rename = True
+    target_iso = out_dir / f"{job.disc_label}.iso"
+    # auto-rename if exists
+    target_iso = _unique_path(target_iso)
 
     steps: List[Step] = [
         (build_iso_dump_cmd(job.drive, iso_path), "Creating ISO image", True)

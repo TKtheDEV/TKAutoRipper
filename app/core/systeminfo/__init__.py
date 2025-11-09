@@ -1,3 +1,4 @@
+# systeminfo/__init__.py
 import platform
 
 system = platform.system().lower()
