@@ -8,20 +8,25 @@ import signal
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Any
 
 from app.core.drive.manager import drive_tracker
 from .job import Job
 
 # --------------------- step resolution ----------------------
-def get_job_steps(job: Job) -> List[Tuple[List[str], str, bool, float]]:
+def get_job_steps(job: Job) -> List[Tuple]:
     """
     Resolve disc type to the proper ripper and return the step tuples.
 
-    Step tuple shapes supported:
+    Step tuple shapes supported (raw from rippers):
       (cmd, description, release_drive)
       (cmd, description, release_drive, weight)
-      (cmd, description, release_drive, weight, dest_path)
+      (cmd, description, release_drive, dest)
+      (cmd, description, release_drive, progress_adapter)
+      (cmd, description, release_drive, weight, dest)
+      (cmd, description, release_drive, weight, dest, progress_adapter)
+
+    The runner normalises them internally.
     """
     dtype = (job.disc_type or "").lower()
 
@@ -46,7 +51,9 @@ def get_job_steps(job: Job) -> List[Tuple[List[str], str, bool, float]]:
 
 # ---------------------- progress helpers ----------------------
 _percent_re = re.compile(r"(?<!\d)(\d{1,3}(?:\.\d+)?)\s*%")
-_bytes_re = re.compile(r"(\d+)\s+bytes")  # dd status
+
+# ── MakeMKV PRGV file parsing (title, overall, max=65536) ──
+_PRGV_RE = re.compile(r"PRGV:(\d+),(\d+),(\d+)")
 
 
 def _find_percent(text: str) -> Optional[float]:
@@ -60,19 +67,6 @@ def _find_percent(text: str) -> Optional[float]:
     except ValueError:
         pass
     return None
-
-
-def _dd_percent_from_line(text: str, expected_bytes: Optional[int]) -> Optional[float]:
-    if expected_bytes and expected_bytes > 0:
-        m = _bytes_re.search(text)
-        if m:
-            done = float(m.group(1))
-            return max(0.0, min(100.0, (done / expected_bytes) * 100.0))
-    return None
-
-
-# ── MakeMKV PRGV file parsing (title, overall, max=65536) ──
-_PRGV_RE = re.compile(r"PRGV:(\d+),(\d+),(\d+)")
 
 
 def _read_last_prgv(path: Path) -> tuple[Optional[float], Optional[float]]:
@@ -125,7 +119,6 @@ def _start_makemkv_watcher(
                 if sp != last_step:
                     last_step = sp
                     job.step_progress = sp
-                    # recompute total using current step weight
                     total = total_done_weight + (weight * (sp / 100.0))
                     job.progress = int(round(total * 100.0))
                     changed = True
@@ -247,23 +240,43 @@ class JobRunner:
                 self.job.status = "Running"
 
                 raw_steps = get_job_steps(self.job)
-                steps: List[Tuple[List[str], str, bool, float, Optional[Path]]] = []
+                # normalised: (cmd, desc, release_after, weight, dest, progress_adapter)
+                steps: List[Tuple[List[str], str, bool, float, Optional[Path], Any]] = []
 
                 dtype = (self.job.disc_type or "").lower()
                 is_rom = dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}
 
-                # normalize weights and accept optional dest (5th item)
-                def norm_step(s, w):
+                # normalize weights / dest / progress adapter
+                def _has_adapter(x: Any) -> bool:
+                    return hasattr(x, "on_line") or callable(x)
+
+                def norm_step(s, default_weight: float):
                     if len(s) == 3:
                         cmd, desc, rel = s
-                        return (cmd, desc, rel, w, None)
-                    elif len(s) == 4:
-                        cmd, desc, rel, w0 = s
-                        return (cmd, desc, rel, w0, None)
-                    elif len(s) == 5:
-                        return s
-                    else:
-                        raise ValueError("Invalid step tuple length")
+                        return (cmd, desc, rel, default_weight, None, None)
+                    if len(s) == 4:
+                        cmd, desc, rel, x = s
+                        if isinstance(x, (int, float)):
+                            return (cmd, desc, rel, float(x), None, None)
+                        if _has_adapter(x):
+                            return (cmd, desc, rel, default_weight, None, x)
+                        # assume dest
+                        return (cmd, desc, rel, default_weight, x, None)
+                    if len(s) == 5:
+                        cmd, desc, rel, a, b = s
+                        if isinstance(a, (int, float)):
+                            # (cmd, desc, rel, weight, dest/adapter)
+                            if _has_adapter(b):
+                                return (cmd, desc, rel, float(a), None, b)
+                            return (cmd, desc, rel, float(a), b, None)
+                        # (cmd, desc, rel, dest, adapter?)
+                        adapter = b if _has_adapter(b) else None
+                        dest = a
+                        return (cmd, desc, rel, default_weight, dest, adapter)
+                    if len(s) == 6:
+                        cmd, desc, rel, weight, dest, adapter = s
+                        return (cmd, desc, rel, float(weight), dest, adapter)
+                    raise ValueError("Invalid step tuple length")
 
                 if dtype == "cd_audio":
                     for s in raw_steps:
@@ -288,7 +301,7 @@ class JobRunner:
                 # prefill total progress if resuming past some steps
                 total_done_weight = 0.0
                 if start_index > 1:
-                    for i, (_c, _d, _r, w, _dest) in enumerate(steps, start=1):
+                    for i, (_c, _d, _r, w, _dest, _ad) in enumerate(steps, start=1):
                         if i < start_index:
                             total_done_weight += w
                     self.job.progress = int(round(total_done_weight * 100.0))
@@ -300,29 +313,22 @@ class JobRunner:
                     if self._cancelled:
                         break
 
-                    cmd, description, release_after, weight, dest = step_tuple
+                    cmd, description, release_after, weight, dest, progress_adapter = step_tuple
 
-                    # --- IMPORTANT: for ROM discs, recompute the step command
-                    #     at runtime for steps >= 2 so we pick up a renamed
-                    #     job.output_path that may have changed while dd ran.
+                    # --- Rebuild ROM steps at runtime to pick up renamed output path
                     if is_rom and idx >= 2:
                         fresh_raw = get_job_steps(self.job)
                         if 1 <= idx <= len(fresh_raw):
                             fresh = fresh_raw[idx - 1]
-                            if len(fresh) == 3:
-                                f_cmd, f_desc, f_rel = fresh
-                                cmd, description, release_after = f_cmd, f_desc, f_rel
-                            elif len(fresh) == 4:
-                                f_cmd, f_desc, f_rel, _fw = fresh
-                                cmd, description, release_after = f_cmd, f_desc, f_rel
-                            elif len(fresh) == 5:
-                                f_cmd, f_desc, f_rel, _fw, f_dest = fresh
-                                cmd, description, release_after, dest = (
-                                    f_cmd,
-                                    f_desc,
-                                    f_rel,
-                                    f_dest,
-                                )
+                            # re-normalise using existing weight
+                            f_cmd, f_desc, f_rel, _fw, f_dest, f_ad = norm_step(fresh, weight)
+                            cmd, description, release_after, dest, progress_adapter = (
+                                f_cmd,
+                                f_desc,
+                                f_rel,
+                                f_dest,
+                                f_ad,
+                            )
 
                     self.job.step = idx
                     self.job.step_description = description
@@ -333,21 +339,15 @@ class JobRunner:
                     except Exception:
                         pass
 
-                    # tool detection
+                    # tool detection (generic; no OS-specific bits here)
                     cmd_str = " ".join(shlex.quote(str(x)) for x in cmd)
                     low_desc = description.lower()
-                    is_dd = (
-                        " dd " in f" {cmd_str} "
-                        or cmd_str.startswith("dd ")
-                        or "creating iso" in low_desc
-                    )
                     is_makemkv = "makemkv" in cmd_str.lower() or "makemkv" in low_desc
                     is_handbrake = "handbrakecli" in cmd_str.lower() or "handbrake" in low_desc
                     is_compress = any(
                         x in cmd_str.lower() for x in ("zstd", "bzip2", "bz2")
                     ) or "compressing" in low_desc
 
-                    expected_bytes: Optional[int] = None
                     makemkv_progress_path: Optional[Path] = None
                     mm_stop_evt: Optional[threading.Event] = None
                     mm_thread: Optional[threading.Thread] = None
@@ -359,13 +359,20 @@ class JobRunner:
                         makemkv_progress_path = self.job.temp_path / "makemkv_progress.txt"
 
                     if is_handbrake:
-                        # Total titles = *.mkv created by MakeMKV in temp/<jobid> (subfolders included)
                         try:
                             hb_total_titles = sum(
                                 1 for _ in self.job.temp_path.rglob("*.mkv")
                             )
                         except Exception:
                             hb_total_titles = None
+
+                    # per-step adapter state (for dd/abcde/etc; implemented in rippers)
+                    adapter_state: dict = {}
+                    if progress_adapter and hasattr(progress_adapter, "on_start"):
+                        try:
+                            progress_adapter.on_start(self.job, cmd, adapter_state)
+                        except Exception:
+                            pass
 
                     # -------- lock output at the right time --------
                     if lock_at and lock_at > 0 and not getattr(
@@ -438,7 +445,6 @@ class JobRunner:
                         title_pct: Optional[float] = None
 
                         if is_handbrake:
-                            # Title (yellow) = HandBrake title percent
                             m = re.search(
                                 r"(?:encoding:\s*)?task\s+(\d+)\s+of\s+(\d+),\s*([0-9]+(?:\.[0-9]+)?)\s*%",
                                 line,
@@ -449,7 +455,6 @@ class JobRunner:
                                 cur_title_pct = float(m.group(3))
                                 title_pct = cur_title_pct
 
-                            # Lazily (re)discover totals until we have a value
                             if hb_total_titles is None or hb_total_titles == 0:
                                 try:
                                     hb_total_titles = sum(
@@ -458,7 +463,6 @@ class JobRunner:
                                 except Exception:
                                     hb_total_titles = 0
 
-                            # Step (blue) = (#finished outputs + fraction of current) / total titles
                             if (
                                 hb_total_titles
                                 and hb_total_titles > 0
@@ -483,26 +487,35 @@ class JobRunner:
                                     if cur_title_pct is not None:
                                         step_pct = cur_title_pct
                             else:
-                                # fallback if totals unknown yet
                                 if cur_title_pct is not None:
                                     step_pct = cur_title_pct
 
                         elif is_makemkv:
-                            # stdout fallback (watcher is the primary source)
                             p = _find_percent(line)
                             if p is not None:
                                 step_pct = p
                                 title_pct = p
 
-                        elif is_dd:
-                            p = _dd_percent_from_line(line, expected_bytes)
-                            step_pct = p if p is not None else _find_percent(line)
-
-                        elif "abcde" in cmd_str or "ripping & encoding audio cd" in low_desc:
-                            step_pct = _find_percent(line)
-
                         elif is_compress:
                             step_pct = _find_percent(line)
+
+                        # delegate extra parsing to a per-step progress adapter (dd, abcde, …)
+                        if progress_adapter:
+                            try:
+                                if hasattr(progress_adapter, "on_line"):
+                                    sp2, tp2 = progress_adapter.on_line(
+                                        line, adapter_state, self.job
+                                    )
+                                else:
+                                    sp2, tp2 = progress_adapter(
+                                        line, adapter_state, self.job
+                                    )
+                                if sp2 is not None:
+                                    step_pct = sp2
+                                if tp2 is not None:
+                                    title_pct = tp2
+                            except Exception:
+                                pass
 
                         if title_pct is not None:
                             self.job.title_progress = int(
@@ -557,7 +570,6 @@ class JobRunner:
                             self._emit_output("[TKAR] Output path locked")
 
                     if release_after:
-                        # release & eject
                         if self.job.drive:
                             drive_tracker.release_drive(self.job.drive)
                             try:
@@ -566,7 +578,6 @@ class JobRunner:
                                 )
                             except Exception:
                                 pass
-                        # clear the drive on the job so UI stops showing it
                         self.job.drive = None
                         try:
                             self.job.save_state({"drive": None})
