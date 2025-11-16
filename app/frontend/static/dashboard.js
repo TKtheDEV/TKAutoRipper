@@ -111,7 +111,7 @@ on(document,'button.eject-btn','click',(e,btn)=>{
   ejectDrive(path, hasJob);
 });
 
-// ====== Jobs (Cancel/Delete in the same spot; Retry when step_index >= 2) ======
+// ====== Jobs (Cancel/Delete in the same spot; Retry when step >= 2) ======
 async function updateJobs(){
   const jobs = await fetchJSON('/api/jobs');
   const container = document.getElementById('jobs');
@@ -137,7 +137,7 @@ async function updateJobs(){
     const running = /running|ripping|queued/.test(s);
     const prog = Number.isFinite(job.progress) ? job.progress : 0;
     const drive = job.drive_path || job.drive || job.driveDevice || job.drive_path_raw || '';
-    const showRetry = !running && Number(job.step_index) >= 2;
+    const showRetry = !running && Number(job.step) >= 2;
 
     const primaryAttr = running ? 'data-cancel' : 'data-delete';
     const primaryText = running ? '⛔ Cancel' : '🗑 Delete';

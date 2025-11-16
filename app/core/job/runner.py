@@ -43,9 +43,11 @@ def get_job_steps(job: Job) -> List[Tuple[List[str], str, bool, float]]:
 
     raise ValueError(f"Unsupported disc type: {dtype}")
 
+
 # ---------------------- progress helpers ----------------------
 _percent_re = re.compile(r"(?<!\d)(\d{1,3}(?:\.\d+)?)\s*%")
-_bytes_re   = re.compile(r"(\d+)\s+bytes")  # dd status
+_bytes_re = re.compile(r"(\d+)\s+bytes")  # dd status
+
 
 def _find_percent(text: str) -> Optional[float]:
     m = _percent_re.search(text)
@@ -59,6 +61,7 @@ def _find_percent(text: str) -> Optional[float]:
         pass
     return None
 
+
 def _dd_percent_from_line(text: str, expected_bytes: Optional[int]) -> Optional[float]:
     if expected_bytes and expected_bytes > 0:
         m = _bytes_re.search(text)
@@ -67,8 +70,10 @@ def _dd_percent_from_line(text: str, expected_bytes: Optional[int]) -> Optional[
             return max(0.0, min(100.0, (done / expected_bytes) * 100.0))
     return None
 
+
 # ── MakeMKV PRGV file parsing (title, overall, max=65536) ──
 _PRGV_RE = re.compile(r"PRGV:(\d+),(\d+),(\d+)")
+
 
 def _read_last_prgv(path: Path) -> tuple[Optional[float], Optional[float]]:
     """
@@ -84,8 +89,8 @@ def _read_last_prgv(path: Path) -> tuple[Optional[float], Optional[float]]:
             if not m:
                 continue
             title_v = float(m.group(1))
-            step_v  = float(m.group(2))
-            max_v   = float(m.group(3)) or 65536.0
+            step_v = float(m.group(2))
+            max_v = float(m.group(3)) or 65536.0
 
             def pct(v: float) -> float:
                 v = max(0.0, min(v, max_v))
@@ -96,15 +101,19 @@ def _read_last_prgv(path: Path) -> tuple[Optional[float], Optional[float]]:
     except Exception:
         return (None, None)
 
-def _start_makemkv_watcher(progress_path: Path,
-                           job: Job,
-                           stop_evt: threading.Event,
-                           weight: float,
-                           total_done_weight: float) -> threading.Thread:
+
+def _start_makemkv_watcher(
+    progress_path: Path,
+    job: Job,
+    stop_evt: threading.Event,
+    weight: float,
+    total_done_weight: float,
+) -> threading.Thread:
     """
     Background thread: poll makemkv_progress.txt 5×/sec and update
     job.step_progress, job.title_progress and job.progress.
     """
+
     def run():
         last_step = -1
         last_title = -1
@@ -127,17 +136,28 @@ def _start_makemkv_watcher(progress_path: Path,
                     job.title_progress = tp
                     changed = True
             if changed:
-                try: job.save_state()
-                except Exception: pass
+                try:
+                    job.save_state()
+                except Exception:
+                    pass
             stop_evt.wait(0.2)  # ~5 Hz
 
     th = threading.Thread(target=run, daemon=True)
     th.start()
     return th
 
+
 # ---------------------- weighting policies ----------------------
-ROM_WEIGHTS   = { "cd_rom": (0.50, 0.50), "dvd_rom": (0.60, 0.40), "bluray_rom": (0.70, 0.30), "other_disc": (0.60, 0.40) }
-VIDEO_WEIGHTS = { "dvd_video": (0.60, 0.40), "bluray_video": (0.70, 0.30) }
+ROM_WEIGHTS = {
+    "cd_rom": (0.50, 0.50),
+    "dvd_rom": (0.60, 0.40),
+    "bluray_rom": (0.70, 0.30),
+    "other_disc": (0.60, 0.40),
+}
+VIDEO_WEIGHTS = {
+    "dvd_video": (0.60, 0.40),
+    "bluray_video": (0.70, 0.30),
+}
 
 # ---------------------- output lock policy ----------------------
 def _lock_index_for(dtype: str, steps_count: int) -> int | None:
@@ -158,6 +178,7 @@ def _lock_index_for(dtype: str, steps_count: int) -> int | None:
     if d == "cd_audio":
         return None
     return 2
+
 
 # ======================== Runner ==============================
 class JobRunner:
@@ -227,30 +248,39 @@ class JobRunner:
 
                 raw_steps = get_job_steps(self.job)
                 steps: List[Tuple[List[str], str, bool, float, Optional[Path]]] = []
+
                 dtype = (self.job.disc_type or "").lower()
+                is_rom = dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}
 
                 # normalize weights and accept optional dest (5th item)
                 def norm_step(s, w):
                     if len(s) == 3:
-                        cmd, desc, rel = s; return (cmd, desc, rel, w, None)
+                        cmd, desc, rel = s
+                        return (cmd, desc, rel, w, None)
                     elif len(s) == 4:
-                        cmd, desc, rel, w0 = s; return (cmd, desc, rel, w0, None)
+                        cmd, desc, rel, w0 = s
+                        return (cmd, desc, rel, w0, None)
                     elif len(s) == 5:
                         return s
                     else:
                         raise ValueError("Invalid step tuple length")
 
                 if dtype == "cd_audio":
-                    for s in raw_steps: steps.append(norm_step(s, 1.0))
+                    for s in raw_steps:
+                        steps.append(norm_step(s, 1.0))
                 elif dtype in ROM_WEIGHTS:
                     w1, w2 = ROM_WEIGHTS[dtype]
-                    for i, s in enumerate(raw_steps): steps.append(norm_step(s, w1 if i == 0 else w2))
+                    for i, s in enumerate(raw_steps):
+                        steps.append(norm_step(s, w1 if i == 0 else w2))
                 elif dtype in VIDEO_WEIGHTS:
                     w1, w2 = VIDEO_WEIGHTS[dtype]
-                    for i, s in enumerate(raw_steps): steps.append(norm_step(s, w1 if i == 0 else w2))
+                    for i, s in enumerate(raw_steps):
+                        steps.append(norm_step(s, w1 if i == 0 else w2))
                 else:
-                    n = max(1, len(raw_steps)); w = 1.0 / n
-                    for s in raw_steps: steps.append(norm_step(s, w))
+                    n = max(1, len(raw_steps))
+                    w = 1.0 / n
+                    for s in raw_steps:
+                        steps.append(norm_step(s, w))
 
                 self.job.steps_total = len(steps)
                 lock_at = _lock_index_for(self.job.disc_type, len(steps))
@@ -258,32 +288,64 @@ class JobRunner:
                 # prefill total progress if resuming past some steps
                 total_done_weight = 0.0
                 if start_index > 1:
-                    for i, (_c,_d,_r,w,_dest) in enumerate(steps, start=1):
+                    for i, (_c, _d, _r, w, _dest) in enumerate(steps, start=1):
                         if i < start_index:
                             total_done_weight += w
                     self.job.progress = int(round(total_done_weight * 100.0))
                     self.job.step = start_index
 
-                for idx, (cmd, description, release_after, weight, dest) in enumerate(steps, start=1):
+                for idx, step_tuple in enumerate(steps, start=1):
                     if idx < start_index:
                         continue
                     if self._cancelled:
                         break
 
+                    cmd, description, release_after, weight, dest = step_tuple
+
+                    # --- IMPORTANT: for ROM discs, recompute the step command
+                    #     at runtime for steps >= 2 so we pick up a renamed
+                    #     job.output_path that may have changed while dd ran.
+                    if is_rom and idx >= 2:
+                        fresh_raw = get_job_steps(self.job)
+                        if 1 <= idx <= len(fresh_raw):
+                            fresh = fresh_raw[idx - 1]
+                            if len(fresh) == 3:
+                                f_cmd, f_desc, f_rel = fresh
+                                cmd, description, release_after = f_cmd, f_desc, f_rel
+                            elif len(fresh) == 4:
+                                f_cmd, f_desc, f_rel, _fw = fresh
+                                cmd, description, release_after = f_cmd, f_desc, f_rel
+                            elif len(fresh) == 5:
+                                f_cmd, f_desc, f_rel, _fw, f_dest = fresh
+                                cmd, description, release_after, dest = (
+                                    f_cmd,
+                                    f_desc,
+                                    f_rel,
+                                    f_dest,
+                                )
+
                     self.job.step = idx
                     self.job.step_description = description
                     self.job.step_progress = 0
                     self.job.title_progress = 0
-                    try: self.job.save_state()
-                    except Exception: pass
+                    try:
+                        self.job.save_state()
+                    except Exception:
+                        pass
 
                     # tool detection
                     cmd_str = " ".join(shlex.quote(str(x)) for x in cmd)
                     low_desc = description.lower()
-                    is_dd         = " dd " in f" {cmd_str} " or cmd_str.startswith("dd ") or "creating iso" in low_desc
-                    is_makemkv    = "makemkv" in cmd_str.lower() or "makemkv" in low_desc
-                    is_handbrake  = "handbrakecli" in cmd_str.lower() or "handbrake" in low_desc
-                    is_compress   = any(x in cmd_str.lower() for x in ("zstd", "bzip2", "bz2")) or "compressing" in low_desc
+                    is_dd = (
+                        " dd " in f" {cmd_str} "
+                        or cmd_str.startswith("dd ")
+                        or "creating iso" in low_desc
+                    )
+                    is_makemkv = "makemkv" in cmd_str.lower() or "makemkv" in low_desc
+                    is_handbrake = "handbrakecli" in cmd_str.lower() or "handbrake" in low_desc
+                    is_compress = any(
+                        x in cmd_str.lower() for x in ("zstd", "bzip2", "bz2")
+                    ) or "compressing" in low_desc
 
                     expected_bytes: Optional[int] = None
                     makemkv_progress_path: Optional[Path] = None
@@ -299,23 +361,33 @@ class JobRunner:
                     if is_handbrake:
                         # Total titles = *.mkv created by MakeMKV in temp/<jobid> (subfolders included)
                         try:
-                            hb_total_titles = sum(1 for _ in self.job.temp_path.rglob("*.mkv"))
+                            hb_total_titles = sum(
+                                1 for _ in self.job.temp_path.rglob("*.mkv")
+                            )
                         except Exception:
                             hb_total_titles = None
 
-                    # -------- lock output at the right time (never at step 1 instantly) --------
-                    if lock_at and lock_at > 0 and not getattr(self.job, "output_locked", False):
+                    # -------- lock output at the right time --------
+                    if lock_at and lock_at > 0 and not getattr(
+                        self.job, "output_locked", False
+                    ):
                         if idx == lock_at:
                             self.job.output_locked = True
                             try:
-                                if self.job.override_filename:
-                                    self.job.output_path.parent.mkdir(parents=True, exist_ok=True)
+                                if is_rom:
+                                    Path(self.job.output_path).parent.mkdir(
+                                        parents=True, exist_ok=True
+                                    )
                                 else:
-                                    self.job.output_path.mkdir(parents=True, exist_ok=True)
+                                    Path(self.job.output_path).mkdir(
+                                        parents=True, exist_ok=True
+                                    )
                             except Exception:
                                 pass
-                            try: self.job.save_state({"output_locked": True})
-                            except Exception: pass
+                            try:
+                                self.job.save_state({"output_locked": True})
+                            except Exception:
+                                pass
                             self._emit_output("[TKAR] Output path locked")
 
                     # spawn (IMPORTANT: run inside the job's temp dir so MakeMKV writes PRGV here)
@@ -327,14 +399,18 @@ class JobRunner:
                         bufsize=1,
                         universal_newlines=True,
                         preexec_fn=os.setsid,
-                        cwd=str(self.job.temp_path)
+                        cwd=str(self.job.temp_path),
                     )
 
                     # If this is a MakeMKV step, start the PRGV watcher
                     if is_makemkv and makemkv_progress_path:
                         mm_stop_evt = threading.Event()
                         mm_thread = _start_makemkv_watcher(
-                            makemkv_progress_path, self.job, mm_stop_evt, weight, total_done_weight
+                            makemkv_progress_path,
+                            self.job,
+                            mm_stop_evt,
+                            weight,
+                            total_done_weight,
                         )
 
                     # stream + parse
@@ -365,7 +441,8 @@ class JobRunner:
                             # Title (yellow) = HandBrake title percent
                             m = re.search(
                                 r"(?:encoding:\s*)?task\s+(\d+)\s+of\s+(\d+),\s*([0-9]+(?:\.[0-9]+)?)\s*%",
-                                line, re.I
+                                line,
+                                re.I,
                             )
                             cur_title_pct = None
                             if m:
@@ -373,21 +450,35 @@ class JobRunner:
                                 title_pct = cur_title_pct
 
                             # Lazily (re)discover totals until we have a value
-                            if (hb_total_titles is None or hb_total_titles == 0):
+                            if hb_total_titles is None or hb_total_titles == 0:
                                 try:
-                                    hb_total_titles = sum(1 for _ in self.job.temp_path.rglob("*.mkv"))
+                                    hb_total_titles = sum(
+                                        1 for _ in self.job.temp_path.rglob("*.mkv")
+                                    )
                                 except Exception:
                                     hb_total_titles = 0
 
                             # Step (blue) = (#finished outputs + fraction of current) / total titles
-                            if hb_total_titles and hb_total_titles > 0 and self.job.output_path and self.job.output_path.exists():
+                            if (
+                                hb_total_titles
+                                and hb_total_titles > 0
+                                and self.job.output_path
+                                and Path(self.job.output_path).exists()
+                            ):
                                 try:
                                     produced = 0
+                                    out_path = Path(self.job.output_path)
                                     for ext in ("*.mkv", "*.mp4", "*.m4v"):
-                                        produced += sum(1 for _ in self.job.output_path.rglob(ext))
+                                        produced += sum(
+                                            1 for _ in out_path.rglob(ext)
+                                        )
                                     per_title = 100.0 / hb_total_titles
-                                    in_title  = (cur_title_pct or 0.0) * (per_title / 100.0)
-                                    step_pct  = min(100.0, produced * per_title + in_title)
+                                    in_title = (cur_title_pct or 0.0) * (
+                                        per_title / 100.0
+                                    )
+                                    step_pct = min(
+                                        100.0, produced * per_title + in_title
+                                    )
                                 except Exception:
                                     if cur_title_pct is not None:
                                         step_pct = cur_title_pct
@@ -414,7 +505,9 @@ class JobRunner:
                             step_pct = _find_percent(line)
 
                         if title_pct is not None:
-                            self.job.title_progress = int(max(0.0, min(100.0, title_pct)))
+                            self.job.title_progress = int(
+                                max(0.0, min(100.0, title_pct))
+                            )
 
                         if step_pct is not None:
                             sp = max(0.0, min(100.0, float(step_pct)))
@@ -434,21 +527,33 @@ class JobRunner:
                         self.job.step_progress = 100
                         total_done_weight += weight
                         self.job.progress = int(round(total_done_weight * 100.0))
-                        try: self.job.save_state()
-                        except Exception: pass
+                        try:
+                            self.job.save_state()
+                        except Exception:
+                            pass
 
                         # Post-step lock for ROM/OTHER pipelines with single step (lock_at == 0)
-                        if lock_at == 0 and idx == 1 and not getattr(self.job, "output_locked", False):
+                        if (
+                            lock_at == 0
+                            and idx == 1
+                            and not getattr(self.job, "output_locked", False)
+                        ):
                             self.job.output_locked = True
                             try:
-                                if self.job.override_filename:
-                                    self.job.output_path.parent.mkdir(parents=True, exist_ok=True)
+                                if is_rom:
+                                    Path(self.job.output_path).parent.mkdir(
+                                        parents=True, exist_ok=True
+                                    )
                                 else:
-                                    self.job.output_path.mkdir(parents=True, exist_ok=True)
+                                    Path(self.job.output_path).mkdir(
+                                        parents=True, exist_ok=True
+                                    )
                             except Exception:
                                 pass
-                            try: self.job.save_state({"output_locked": True})
-                            except Exception: pass
+                            try:
+                                self.job.save_state({"output_locked": True})
+                            except Exception:
+                                pass
                             self._emit_output("[TKAR] Output path locked")
 
                     if release_after:
@@ -456,7 +561,9 @@ class JobRunner:
                         if self.job.drive:
                             drive_tracker.release_drive(self.job.drive)
                             try:
-                                subprocess.run(["eject", self.job.drive], check=False)
+                                subprocess.run(
+                                    ["eject", self.job.drive], check=False
+                                )
                             except Exception:
                                 pass
                         # clear the drive on the job so UI stops showing it
@@ -468,9 +575,13 @@ class JobRunner:
 
                     if rc != 0 and not self._cancelled:
                         self.job.status = "Failed"
-                        self._emit_output(f"[TKAR] Step failed: {description} (rc={rc})")
-                        try: self.job.save_state()
-                        except Exception: pass
+                        self._emit_output(
+                            f"[TKAR] Step failed: {description} (rc={rc})"
+                        )
+                        try:
+                            self.job.save_state()
+                        except Exception:
+                            pass
                         break
 
                 if not self._cancelled and self.job.status != "Failed":
@@ -478,12 +589,15 @@ class JobRunner:
                     self.job.progress = 100
                     self.job.step_progress = 100
                     self.job.title_progress = 100
-                    try: self.job.save_state()
-                    except Exception: pass
+                    try:
+                        self.job.save_state()
+                    except Exception:
+                        pass
 
         except Exception as e:
             self.job.status = "Failed"
             self._emit_output(f"[TKAR] Runner crashed: {e}")
-            try: self.job.save_state()
+            try:
+                self.job.save_state()
             except Exception:
                 pass

@@ -1,13 +1,11 @@
 # app/api/drives.py
-
-from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 from pathlib import Path
 from pydantic import BaseModel
 import subprocess
 import logging
-from typing import Optional, List
 
 from ..core.configmanager import config
 from ..core.auth import verify_web_auth
@@ -15,6 +13,7 @@ from ..core.job.tracker import job_tracker
 from ..core.drive.manager import drive_tracker
 from ..core.job.runner import JobRunner
 from ..core.job.job import sanitize_folder
+from ..core.job.paths import default_rom_output_path
 
 router = APIRouter()
 security = HTTPBasic()
@@ -24,8 +23,8 @@ def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = config.get("auth", "username")
     correct_password = config.get("auth", "password")
     if not (
-        secrets.compare_digest(credentials.username, correct_username) and
-        secrets.compare_digest(credentials.password, correct_password)
+        secrets.compare_digest(credentials.username, correct_username)
+        and secrets.compare_digest(credentials.password, correct_password)
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -39,10 +38,10 @@ def insert_drive(payload: dict):
     """
     Called by disc detection when a disc is inserted.
     Creates a Job with the correct output root based on disc_type:
-      dvd_video   -> [DVD].outputdirectory
-      bluray_video-> [BLURAY].outputdirectory
-      cd_audio    -> [CD].outputdirectory  (abcde still owns layout on Linux)
-      *_rom/other -> [OTHER].outputdirectory (ISO)
+      dvd_video    -> [DVD].outputdirectory (directory)
+      bluray_video -> [BLURAY].outputdirectory (directory)
+      cd_audio     -> [CD].outputdirectory (abcde owns layout on Linux)
+      *_rom/other  -> [OTHER].outputdirectory + filename (final ISO path)
     """
     drive = payload.get("drive")
     disc_type = (payload.get("disc_type") or "").lower()
@@ -60,7 +59,7 @@ def insert_drive(payload: dict):
     if drv and not drv.is_available:
         return {"status": "Drive in use, skipping job creation"}
 
-    # Resolve temp and output directories
+    # Resolve temp directory
     temp_dir = Path(config.get("General", "tempdirectory")).expanduser()
 
     # Map API disc types to config sections
@@ -76,12 +75,18 @@ def insert_drive(payload: dict):
     }
     cfg_section = section_map.get(disc_type, "OTHER")
 
-    output_base = (
-        config.get(cfg_section, "outputdirectory")
-        or config.get("OTHER", "outputdirectory")
-    )
     safe_label = sanitize_folder(disc_label or "DISC")
-    output_dir = Path(str(output_base)).expanduser() / safe_label
+
+    # For ROM/OTHER we treat output_path as the *final file path*.
+    # For video/audio we treat it as a directory.
+    if cfg_section == "OTHER":
+        output_dir = default_rom_output_path(disc_type, disc_label)
+    else:
+        output_base = (
+            config.get(cfg_section, "outputdirectory")
+            or config.get("OTHER", "outputdirectory")
+        )
+        output_dir = Path(str(output_base)).expanduser() / safe_label
 
     # Create job and start runner
     job = job_tracker.create_job(
@@ -90,7 +95,7 @@ def insert_drive(payload: dict):
         disc_label=disc_label,
         temp_dir=temp_dir,
         output_dir=output_dir,
-        steps_total=1  # placeholder; the runner may adjust the effective step count
+        steps_total=1,  # placeholder; runner will adjust
     )
     drive_tracker.assign_job(drive, job.job_id)
 
@@ -115,7 +120,9 @@ def remove_drive(payload: dict):
         job_tracker.cancel_job(job_id)
 
     drive_tracker.release_drive(drive)
-    return {"status": "Drive released and job cancelled" if job_id else "Drive released"}
+    return {
+        "status": "Drive released and job cancelled" if job_id else "Drive released"
+    }
 
 
 @router.get("/api/drives", dependencies=[Depends(verify_web_auth)])
@@ -127,7 +134,7 @@ def list_drives():
             "capability": d.capability,
             "job_id": d.job_id if d.job_id else None,
             "disc_label": d.disc_label if d.disc_label else None,
-            "blacklisted": d.blacklisted
+            "blacklisted": d.blacklisted,
         }
         for d in drive_tracker.get_all_drives()
     ]

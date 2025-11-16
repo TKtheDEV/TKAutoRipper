@@ -108,11 +108,12 @@ async function prefillOutput(jobId, discType){
         if (save) save.disabled = false;
       }
     } else {
-      // Videos / Audio: folder target (or already set)
-      input.value = j.override_filename ? `${j.output_path}/${j.override_filename}` : j.output_path;
+      // Videos / Audio / generic: use output_path directly
+      input.value = j.output_path || '';
       input.disabled = !!j.locked;
       if (save) save.disabled = !!j.locked;
     }
+
     const hint = $('#output-lock-hint');
     if (hint) hint.style.display = j.locked ? '' : 'none';
   }catch(err){
@@ -145,7 +146,7 @@ async function prefillOutput(jobId, discType){
         method:'PUT', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ path: v })
       });
-      input.value = resp.override_filename ? `${resp.output_path}/${resp.override_filename}` : resp.output_path;
+      input.value = resp.output_path || '';
       showToast('Output updated', 'success');
     }catch(err){ showToast(`Save failed: ${err.message||err}`, 'error'); }
   });
