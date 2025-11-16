@@ -61,7 +61,7 @@ These are installed by the installer script if missing:
 
 ```bash
 # 1) Clone the repo
-git clone https://github.com/<your-user>/TKAutoRipper.git
+git clone https://github.com/TKtheDEV/TKAutoRipper.git
 cd TKAutoRipper
 
 # 2) Run the Ubuntu installer (checks HB Flatpak, MakeMKV, LACT, then sets everything up)
