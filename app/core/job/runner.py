@@ -13,6 +13,8 @@ from typing import Callable, List, Optional, Tuple, Any
 from app.core.drive.manager import drive_tracker
 from .job import Job
 
+IS_WINDOWS = os.name == "nt"
+
 # --------------------- step resolution ----------------------
 def get_job_steps(job: Job) -> List[Tuple]:
     """
@@ -30,20 +32,33 @@ def get_job_steps(job: Job) -> List[Tuple]:
     """
     dtype = (job.disc_type or "").lower()
 
+    # NOTE:
+    #   On Windows we currently implement only the VIDEO rippers.
+    #   ROM/audio rippers are Linux-only for now.
     if dtype == "cd_audio":
+        if IS_WINDOWS:
+            raise ValueError("cd_audio ripping is not implemented on Windows yet")
         from app.core.rippers.audio.linux import rip_audio_cd
         return rip_audio_cd(job)
 
     if dtype in ("cd_rom", "dvd_rom", "bluray_rom", "other_disc"):
+        if IS_WINDOWS:
+            raise ValueError(f"{dtype} ripping is not implemented on Windows yet")
         from app.core.rippers.other.linux import rip_generic_disc
         return rip_generic_disc(job)
 
     if dtype == "dvd_video":
-        from app.core.rippers.video.linux import rip_video_disc
+        if IS_WINDOWS:
+            from app.core.rippers.video.windows import rip_video_disc
+        else:
+            from app.core.rippers.video.linux import rip_video_disc
         return rip_video_disc(job, "DVD")
 
     if dtype == "bluray_video":
-        from app.core.rippers.video.linux import rip_video_disc
+        if IS_WINDOWS:
+            from app.core.rippers.video.windows import rip_video_disc
+        else:
+            from app.core.rippers.video.linux import rip_video_disc
         return rip_video_disc(job, "BLURAY")
 
     raise ValueError(f"Unsupported disc type: {dtype}")
@@ -172,6 +187,44 @@ def _lock_index_for(dtype: str, steps_count: int) -> int | None:
         return None
     return 2
 
+# ---------------------- drive eject helper ----------------------
+def _eject_drive(drive: str) -> None:
+    """
+    Cross-platform drive eject helper.
+
+    On Linux/BSD: uses the 'eject' command.
+    On Windows: uses Shell.Application COM object and the 'Eject' verb
+                on the drive (e.g. 'E:\\').
+    """
+    if not drive:
+        return
+    try:
+        if IS_WINDOWS:
+            # Ensure Windows-style "E:\" form for the Shell API.
+            ps_drive = drive.rstrip("\\") + "\\"
+            ps_script = (
+                "$ErrorActionPreference = 'Stop'; "
+                f"$drive = '{ps_drive}'; "
+                "$shell = New-Object -ComObject Shell.Application; "
+                "$ns = $shell.NameSpace(17); "
+                "$item = $ns.ParseName($drive); "
+                "if ($item -ne $null) { $item.InvokeVerb('Eject') } "
+                "else { throw 'Drive not found for eject' }"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                check=True,
+            )
+        else:
+            subprocess.run(["eject", drive], check=True)
+    except subprocess.CalledProcessError as e:
+        logging.warning(f"⚠️ Eject command failed for {drive}: {e}")
+        raise HTTPException(status_code=500, detail=f"Eject failed: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error ejecting {drive}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected eject error: {e}"
+        )
 
 # ======================== Runner ==============================
 class JobRunner:
@@ -224,12 +277,15 @@ class JobRunner:
         self._cancelled = True
         if self.process:
             try:
-                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                if IS_WINDOWS:
+                    self.process.terminate()
+                else:
+                    os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
             except Exception:
                 pass
         self.job.status = "Cancelled"
         drive_tracker.release_drive(self.job.drive)
-        subprocess.run(["eject", self.job.drive], check=False)
+        _eject_drive(self.job.drive)
 
     # ---------------- internal ------------------
     def _run_steps(self, start_index: int = 1) -> None:
@@ -398,16 +454,24 @@ class JobRunner:
                             self._emit_output("[TKAR] Output path locked")
 
                     # spawn (IMPORTANT: run inside the job's temp dir so MakeMKV writes PRGV here)
-                    self.process = subprocess.Popen(
-                        cmd,
+                    popen_kwargs = dict(
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
                         bufsize=1,
                         universal_newlines=True,
-                        preexec_fn=os.setsid,
                         cwd=str(self.job.temp_path),
                     )
+
+                    if IS_WINDOWS:
+                        try:
+                            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+                        except AttributeError:
+                            pass
+                    else:
+                        popen_kwargs["preexec_fn"] = os.setsid
+
+                    self.process = subprocess.Popen(cmd, **popen_kwargs)
 
                     # If this is a MakeMKV step, start the PRGV watcher
                     if is_makemkv and makemkv_progress_path:
@@ -572,12 +636,7 @@ class JobRunner:
                     if release_after:
                         if self.job.drive:
                             drive_tracker.release_drive(self.job.drive)
-                            try:
-                                subprocess.run(
-                                    ["eject", self.job.drive], check=False
-                                )
-                            except Exception:
-                                pass
+                            _eject_drive(self.job.drive)
                         self.job.drive = None
                         try:
                             self.job.save_state({"drive": None})

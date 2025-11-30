@@ -4,6 +4,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 from pathlib import Path
 from pydantic import BaseModel
+import os
 import subprocess
 import logging
 
@@ -18,6 +19,8 @@ from ..core.job.paths import default_rom_output_path
 router = APIRouter()
 security = HTTPBasic()
 
+IS_WINDOWS = os.name == "nt"
+
 
 def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = config.get("auth", "username")
@@ -30,6 +33,45 @@ def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+def _eject_drive(drive: str) -> None:
+    """
+    Cross-platform drive eject helper.
+
+    On Linux/BSD: uses the 'eject' command.
+    On Windows: uses Shell.Application COM object and the 'Eject' verb
+                on the drive (e.g. 'E:\\').
+    """
+    if not drive:
+        return
+    try:
+        if IS_WINDOWS:
+            # Ensure Windows-style "E:\" form for the Shell API.
+            ps_drive = drive.rstrip("\\") + "\\"
+            ps_script = (
+                "$ErrorActionPreference = 'Stop'; "
+                f"$drive = '{ps_drive}'; "
+                "$shell = New-Object -ComObject Shell.Application; "
+                "$ns = $shell.NameSpace(17); "
+                "$item = $ns.ParseName($drive); "
+                "if ($item -ne $null) { $item.InvokeVerb('Eject') } "
+                "else { throw 'Drive not found for eject' }"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                check=True,
+            )
+        else:
+            subprocess.run(["eject", drive], check=True)
+    except subprocess.CalledProcessError as e:
+        logging.warning(f"⚠️ Eject command failed for {drive}: {e}")
+        raise HTTPException(status_code=500, detail=f"Eject failed: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error ejecting {drive}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected eject error: {e}"
         )
 
 
@@ -159,11 +201,7 @@ def eject_drive(request: DriveEjectRequest):
             logging.info(f"❌ Cancelled job {job.job_id} due to web eject")
 
     # Attempt eject
-    try:
-        subprocess.run(["eject", drive], check=True)
-        logging.info(f"🛑 Ejected drive: {drive}")
-    except subprocess.CalledProcessError as e:
-        logging.warning(f"⚠️ Eject command failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Eject failed: {e}")
+    _eject_drive(drive)
+    logging.info(f"🛑 Ejected drive: {drive}")
 
     return {"status": "ok"}

@@ -5,3 +5,4 @@ psutil
 python-multipart
 requests
 py-cpuinfo
+httpx

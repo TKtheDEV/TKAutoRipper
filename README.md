@@ -2,7 +2,7 @@
 
 **Status:** ALPHA, use for testing purposes only
 
-**Supported platform:** **Ubuntu Linux only** (others will follow later)
+**Supported platform:** **Ubuntu Linux and Windows 11** (others will follow later)
 
 TKAutoRipper: Awesome scalable zero click optical media backup solution.  
 It detects disc inserts, backs up the data and transcodes/compresses it afterwards.
@@ -10,9 +10,14 @@ It detects disc inserts, backs up the data and transcodes/compresses it afterwar
 > ⚠️ **Disclaimer**
 >
 > - Under active development, not stable, no eta. feel free to reach out if you want to contribute. @legendaryz_fps on discord
-> - Only tested on **Ubuntu 25.04** at the moment.
+> - Only tested on **Ubuntu 25.04** and **Windows 11**at the moment.
 > - APIs and config structure will change.
 > - You agree to run this piece of software on your own risk. I am not responsible for potential damage to your system nor legal consequences if used for illegal purposes. Check your local laws!
+
+> **Note:**
+>
+> - Windows code has issues, not all features are supported. What works: DVDs/BLURAYs, What doesn't: GPU metrics, Storage metrics, CPU temp, CDs, XX_rom, ejecting the drive (real buggy, usually the 20th eject works)
+> - MacOS is not supported yet.
 
 ---
 
