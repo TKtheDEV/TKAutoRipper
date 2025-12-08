@@ -1,6 +1,7 @@
 # app/core/job/runner.py
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shlex
@@ -9,11 +10,13 @@ import subprocess
 import threading
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple, Any
+from fastapi import HTTPException
 
 from app.core.drive.manager import drive_tracker
 from .job import Job
 
 IS_WINDOWS = os.name == "nt"
+IS_DARWIN = os.name == "posix"
 
 # --------------------- step resolution ----------------------
 def get_job_steps(job: Job) -> List[Tuple]:
@@ -50,6 +53,8 @@ def get_job_steps(job: Job) -> List[Tuple]:
     if dtype == "dvd_video":
         if IS_WINDOWS:
             from app.core.rippers.video.windows import rip_video_disc
+        elif IS_DARWIN:
+            from app.core.rippers.video.macos import rip_video_disc
         else:
             from app.core.rippers.video.linux import rip_video_disc
         return rip_video_disc(job, "DVD")
@@ -57,6 +62,8 @@ def get_job_steps(job: Job) -> List[Tuple]:
     if dtype == "bluray_video":
         if IS_WINDOWS:
             from app.core.rippers.video.windows import rip_video_disc
+        elif IS_DARWIN:
+            from app.core.rippers.video.macos import rip_video_disc
         else:
             from app.core.rippers.video.linux import rip_video_disc
         return rip_video_disc(job, "BLURAY")
@@ -195,9 +202,11 @@ def _eject_drive(drive: str) -> None:
     On Linux/BSD: uses the 'eject' command.
     On Windows: uses Shell.Application COM object and the 'Eject' verb
                 on the drive (e.g. 'E:\\').
+    On macOS:   uses 'drutil tray eject -drive <index>' for DRIVE<N> IDs.
     """
     if not drive:
         return
+
     try:
         if IS_WINDOWS:
             # Ensure Windows-style "E:\" form for the Shell API.
@@ -215,8 +224,15 @@ def _eject_drive(drive: str) -> None:
                 ["powershell", "-NoProfile", "-Command", ps_script],
                 check=True,
             )
+
+        elif IS_DARWIN:
+            cmd = ["drutil", "tray", "eject", drive]
+            subprocess.run(cmd, check=True)
+
         else:
+            # Linux / other Unix-like: assume a real device node, e.g. /dev/sr0
             subprocess.run(["eject", drive], check=True)
+
     except subprocess.CalledProcessError as e:
         logging.warning(f"⚠️ Eject command failed for {drive}: {e}")
         raise HTTPException(status_code=500, detail=f"Eject failed: {e}")

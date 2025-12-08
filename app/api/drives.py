@@ -5,6 +5,7 @@ import secrets
 from pathlib import Path
 from pydantic import BaseModel
 import os
+import re
 import subprocess
 import logging
 
@@ -20,7 +21,7 @@ router = APIRouter()
 security = HTTPBasic()
 
 IS_WINDOWS = os.name == "nt"
-
+IS_DARWIN = os.name == "posix"
 
 def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = config.get("auth", "username")
@@ -63,6 +64,11 @@ def _eject_drive(drive: str) -> None:
                 ["powershell", "-NoProfile", "-Command", ps_script],
                 check=True,
             )
+
+        elif IS_DARWIN:
+            cmd = ["drutil", "tray", "eject", drive]
+            subprocess.run(cmd, check=True)
+            
         else:
             subprocess.run(["eject", drive], check=True)
     except subprocess.CalledProcessError as e:
