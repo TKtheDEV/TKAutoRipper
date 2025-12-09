@@ -92,12 +92,6 @@ def rip_video_disc(job: Job, disc_type: str) -> List[Tuple[List[str], str, bool,
     # ── Step 2: HandBrake or Copy ────────────────────────────
     use_hb = _cfg_get_bool(cfg, "usehandbrake", True)
 
-    # Ensure output dir exists before the second step
-    try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-
     if use_hb:
         # HandBrake encode each MKV
         preset_path = (

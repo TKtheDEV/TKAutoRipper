@@ -55,7 +55,7 @@ def _get_cpu_info() -> Dict:
         with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
             temp = int(f.read().strip()) / 1000.0
     except:
-        temp = "Not supported"
+        temp = "N/A "
 
     return {
         "model": model,

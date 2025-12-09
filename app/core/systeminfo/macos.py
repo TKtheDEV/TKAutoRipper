@@ -55,7 +55,7 @@ def _get_cpu_info() -> Dict:
         "threads": psutil.cpu_count(logical=True),
         "frequency": int(psutil.cpu_freq().current),
         "usage": psutil.cpu_percent(interval=1),
-        "temperature": "Unsupported"
+        "temperature": "N/A "
     }
 
 

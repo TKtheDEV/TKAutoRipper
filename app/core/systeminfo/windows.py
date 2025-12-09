@@ -39,7 +39,7 @@ def _format_uptime(boot_time: float) -> str:
 
 
 def _get_cpu_info() -> Dict:
-    temp = "Unsupported"  # Windows temperature requires WMI or third-party libs
+    temp = "N/A "  # Windows temperature requires WMI or third-party libs
 
     return {
         "model": cpuinfo.get_cpu_info()["brand_raw"],

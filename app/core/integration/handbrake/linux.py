@@ -1,73 +1,46 @@
 # app/core/integration/handbrake/linux.py
-from app.core.configmanager import config
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Union
+
+from .common import build_base_args, detect_hw_encoders
+
+HB_FLATPAK_CMD = ["flatpak", "run", "--command=HandBrakeCLI", "fr.handbrake.ghb"]
+HB_NATIVE_CMD = ["HandBrakeCLI"]
+
+
+def _flatpak_available() -> bool:
+    try:
+        subprocess.run(
+            ["flatpak", "info", "fr.handbrake.ghb"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _hb_cli_prefix() -> List[str]:
+    """Prefer Flatpak if installed; otherwise use native CLI."""
+    return HB_FLATPAK_CMD if _flatpak_available() else HB_NATIVE_CMD
 
 
 def get_available_hw_encoders():
-    try:
-        raw_val = config.get("Advanced", "HandbrakeFlatpak")
-        use_flatpak = raw_val if isinstance(raw_val, bool) else True
-        if use_flatpak:
-            cmd = ["flatpak", "run", "--command=HandBrakeCLI", "fr.handbrake.ghb", "-h"]
-        else:
-            cmd = ["HandBrakeCLI", "-h"]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        output = result.stdout.splitlines()
-
-        all_encoders = [line.strip() for line in output if any(v in line for v in ["nvenc_", "qsv_", "vce_"])]
-
-        def extract_codecs(enc_list, prefix):
-            return sorted({e.replace(prefix, "") for e in enc_list if e.startswith(prefix)})
-
-        encoders = {
-            "nvenc": extract_codecs(all_encoders, "nvenc_"),
-            "qsv": extract_codecs(all_encoders, "qsv_"),
-            "vce": extract_codecs(all_encoders, "vce_"),
-            "vt": extract_codecs(all_encoders, "vt_")
-        }
-
-        return {
-            "vendors": {
-                "nvenc": {"label": "NVIDIA NVENC", "available": bool(encoders["nvenc"]), "codecs": encoders["nvenc"]},
-                "qsv": {"label": "Intel QSV", "available": bool(encoders["qsv"]), "codecs": encoders["qsv"]},
-                "vce": {"label": "AMD VCE", "available": bool(encoders["vce"]), "codecs": encoders["vce"]},
-                "vt": {"label": "Apple VT", "available": bool(encoders["vt"]), "codecs": encoders["vt"]}
-            }
-        }
-
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return {
-            "vendors": {
-                "nvenc": {"label": "NVIDIA NVENC", "available": False, "codecs": []},
-                "qsv": {"label": "Intel QSV", "available": False, "codecs": []},
-                "vce": {"label": "AMD VCE", "available": False, "codecs": []},
-                "vt": {"label": "Apple VT", "available": False, "codecs": []}
-            }
-        }
+    return detect_hw_encoders(_hb_cli_prefix())
 
 
 def build_handbrake_cmd(
     mkv_file: Path,
     output_path: Path,
-    preset_path: Path,
+    preset_path: Optional[Union[Path, str]],
     preset_name: str,
-    flatpak: bool = True
 ) -> List[str]:
-
-    base_cmd = [
-        "--preset-import-file", preset_path,
-        "-Z", preset_name,
-        "-i", str(mkv_file),
-        "-o", str(output_path)
-    ]
-
-    if flatpak:
-        return [
-            "flatpak", "run", "--command=HandBrakeCLI", "fr.handbrake.ghb",
-            *base_cmd
-        ]
-    else:
-        return ["HandBrakeCLI", *base_cmd]
+    """Build a HandBrakeCLI command, using Flatpak if available."""
+    return _hb_cli_prefix() + build_base_args(
+        mkv_file=mkv_file,
+        output_path=output_path,
+        preset_path=preset_path,
+        preset_name=preset_name,
+    )
