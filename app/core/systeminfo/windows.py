@@ -39,7 +39,7 @@ def _format_uptime(boot_time: float) -> str:
 
 
 def _get_cpu_info() -> Dict:
-    temp = "N/A "  # Windows temperature requires WMI or third-party libs
+    temp = "N/A "
 
     return {
         "model": cpuinfo.get_cpu_info()["brand_raw"],
@@ -61,26 +61,14 @@ def _get_memory() -> Dict:
     }
 
 
-def _get_storage() -> Dict[str, Dict]:
-    storage_info = {}
-    for partition in psutil.disk_partitions(all=False):
-        if "cdrom" in partition.opts or not partition.fstype:
-            continue
-
-        try:
-            usage = psutil.disk_usage(partition.mountpoint)
-            storage_info[partition.device] = {
-                "mountpoint": partition.mountpoint,
-                "fstype": partition.fstype,
-                "total": usage.total,
-                "used": usage.used,
-                "available": usage.free,
-                "percent": usage.percent
-            }
-        except PermissionError:
-            continue
-
-    return storage_info
+def _get_storage() -> Dict:
+    disk = psutil.disk_usage("C:\\")
+    return {
+        "total": disk.total,
+        "used": disk.used,
+        "available": disk.free,
+        "percent": disk.percent
+    }
 
 
 def _get_gpu_info() -> Dict:
