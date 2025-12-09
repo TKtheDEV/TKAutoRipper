@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import re
 import shlex
 import signal
@@ -15,8 +16,9 @@ from fastapi import HTTPException
 from app.core.drive.manager import drive_tracker
 from .job import Job
 
-IS_WINDOWS = os.name == "nt"
-IS_DARWIN = os.name == "posix"
+_PLATFORM = platform.system()
+IS_WINDOWS = _PLATFORM == "Windows"
+IS_DARWIN = _PLATFORM == "Darwin"
 
 # --------------------- step resolution ----------------------
 def get_job_steps(job: Job) -> List[Tuple]:
@@ -40,14 +42,20 @@ def get_job_steps(job: Job) -> List[Tuple]:
     #   ROM/audio rippers are Linux-only for now.
     if dtype == "cd_audio":
         if IS_WINDOWS:
-            raise ValueError("cd_audio ripping is not implemented on Windows yet")
-        from app.core.rippers.audio.linux import rip_audio_cd
+            from app.core.rippers.audio.windows import rip_audio_cd
+        elif IS_DARWIN:
+            from app.core.rippers.audio.macos import rip_audio_cd
+        else:
+            from app.core.rippers.audio.linux import rip_audio_cd
         return rip_audio_cd(job)
 
     if dtype in ("cd_rom", "dvd_rom", "bluray_rom", "other_disc"):
         if IS_WINDOWS:
-            raise ValueError(f"{dtype} ripping is not implemented on Windows yet")
-        from app.core.rippers.other.linux import rip_generic_disc
+            from app.core.rippers.other.windows import rip_generic_disc
+        elif IS_DARWIN:
+            from app.core.rippers.other.macos import rip_generic_disc
+        else:
+            from app.core.rippers.other.linux import rip_generic_disc
         return rip_generic_disc(job)
 
     if dtype == "dvd_video":

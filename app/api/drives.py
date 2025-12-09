@@ -4,8 +4,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 from pathlib import Path
 from pydantic import BaseModel
-import os
-import re
+import platform
 import subprocess
 import logging
 
@@ -20,8 +19,9 @@ from ..core.job.paths import default_rom_output_path
 router = APIRouter()
 security = HTTPBasic()
 
-IS_WINDOWS = os.name == "nt"
-IS_DARWIN = os.name == "posix"
+_PLATFORM = platform.system()
+IS_WINDOWS = _PLATFORM == "Windows"
+IS_DARWIN = _PLATFORM == "Darwin"
 
 def verify_auth(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = config.get("auth", "username")
