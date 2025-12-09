@@ -2,7 +2,8 @@
 
 **Status:** ALPHA, use for testing purposes only
 
-**Supported platform:** **Ubuntu Linux and Windows 11** (others will follow later)
+**Supported platform:** **Ubuntu 25.4 and later**
+**Testing platforms** **macOS (arm)** **Windows 11**
 
 TKAutoRipper: Awesome scalable zero click optical media backup solution.  
 It detects disc inserts, backs up the data and transcodes/compresses it afterwards.
@@ -10,14 +11,14 @@ It detects disc inserts, backs up the data and transcodes/compresses it afterwar
 > ⚠️ **Disclaimer**
 >
 > - Under active development, not stable, no eta. feel free to reach out if you want to contribute. @legendaryz_fps on discord
-> - Only tested on **Ubuntu 25.04** and **Windows 11**at the moment.
 > - APIs and config structure will change.
 > - You agree to run this piece of software on your own risk. I am not responsible for potential damage to your system nor legal consequences if used for illegal purposes. Check your local laws!
 
 > **Note:**
 >
-> - Windows code has issues, not all features are supported. What works: DVDs/BLURAYs, What doesn't: GPU metrics, Storage metrics, CPU temp, CDs, XX_rom, ejecting the drive (real buggy, usually the 20th eject works)
-> - MacOS is not supported yet.
+> - Windows code has issues, not all features are supported. What works: DVDs/BLURAYs, What doesn't: GPU metrics, CPU temp, CDs, XX_rom, ejecting the drive (real buggy, usually the 20th eject works)
+> - MacOS code has issues, not all features are supported. What works: DVDs/BLURAYs, What doesn't: Multi drive support, GPU metrics, CPU temp, CDs, XX_rom
+> - Windows and Mac only have DVD/BLURAY support at the moment, no CD/Data Disc
 
 ---
 
@@ -75,3 +76,48 @@ bash installer/linux.sh
 # 3) Activate the virtualenv and start TKAutoRipper
 source .venv/bin/activate
 python3 main.py
+```
+
+## 3. Manual install
+
+### Windows:
+
+- Python needs to be installed
+- MakeMKV needs to be installed
+- HandBrakeCLI needs to be installed
+
+```bash
+# 1) Clone the repo
+cd /D %HOMEDRIVE%%HOMEPATH%
+git clone https://github.com/TKtheDEV/TKAutoRipper.git
+cd TKAutoRipper
+
+# 2) Create venv
+python -m venv venv
+
+# 3) Activate venv (required every time you want to start the program)
+.\venv\Scripts\activate.bat
+pip install -r installer/requirements_windows.txt
+python main.py
+```
+
+### macOS:
+
+- Python needs to be installed
+- MakeMKV needs to be installed
+- HandBrakeCLI needs to be installed
+
+```bash
+# 1) Clone the repo
+cd
+git clone https://github.com/TKtheDEV/TKAutoRipper.git
+cd TKAutoRipper
+
+# 2) Create venv
+python3 -m venv venv
+
+# 3) Activate venv (required every time you want to start the program)
+source venv/bin/activate
+pip install -r installer/requirements_mac.txt
+python3 main.py
+```
