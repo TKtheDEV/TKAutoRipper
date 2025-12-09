@@ -119,8 +119,7 @@ def _get_drive_capability(drive: str) -> List[str]:
 
     caps = set()
 
-    if "CD" in text:
-        caps.add("CD")
+    caps.add("CD")
     if "DVD" in text:
         caps.add("DVD")
     # Blu-ray can show up as BD / BLURAY / BLU-RAY / BLU RAY

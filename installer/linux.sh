@@ -85,6 +85,7 @@ install_lact() {
   if ! sudo dpkg -i "$tmpdeb"; then
     warn "dpkg reported issues; attempting 'sudo apt -f install' to fix dependencies..."
     sudo apt -f install -y || true
+    sudo systemctl enable --now lactd.service
   fi
 
   rm -f "$tmpdeb"

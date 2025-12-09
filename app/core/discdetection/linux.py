@@ -27,17 +27,23 @@ def monitor_cdrom():
             drive = line.split("=")[1]
 
         if "DISK_EJECT_REQUEST=1" in line and drive:
-            print("ejectnotice")
-            print("ejectdrive:" + str(drive))
-            logging.info(f"📤 Eject button pressed on {drive}")
+            logging.info(f"Eject button pressed on {drive}")
             try:
                 post_api("/api/drives/remove", {"drive": drive})
             except Exception as e:
-                logging.warning(f"⚠️ Could not notify backend of eject: {e}")
+                logging.warning(f"Could not notify backend of eject: {e}")
+
+        # Disc removed / media no longer present
+        elif "ID_CDROM_MEDIA=0" in line and drive:
+            logging.info(f"Disc removed/ejected from {drive}")
+            try:
+                post_api("/api/drives/remove", {"drive": drive})
+            except Exception as e:
+                logging.warning(f"Could not notify backend of remove: {e}")
 
         # Handle disc insertion
         elif "ID_CDROM_MEDIA=1" in line and drive:
-            logging.info(f"📥 Disc inserted in {drive}")
+            logging.info(f"Disc inserted in {drive}")
             time.sleep(5)  # debounce
             udev_output = subprocess.check_output(
                 ["udevadm", "info", "--query=property", f"--name={drive}"],
@@ -86,7 +92,7 @@ def monitor_cdrom():
                     else:
                         disc_type = "unknown"
 
-                    logging.info(f"📀 {disc_type.upper()} detected in {drive}")
+                    logging.info(f"{disc_type.upper()} detected in {drive}")
 
                     post_api("/api/drives/insert", {
                         "drive": drive,
@@ -95,4 +101,4 @@ def monitor_cdrom():
                     })
 
                 except Exception as e:
-                    logging.error(f"❌ Detection or job creation failed: {e}")
+                    logging.error(f"Detection or job creation failed: {e}")

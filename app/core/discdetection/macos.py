@@ -132,12 +132,12 @@ def monitor_cdrom():
         for drive_id in list(known_media.keys()):
             if drive_id not in current_ids:
                 if known_media.get(drive_id, False):
-                    logging.info(f"📤 Drive disappeared, assuming disc removed: {drive_id}")
+                    logging.info(f"Drive disappeared, assuming disc removed: {drive_id}")
                     try:
                         post_api("/api/drives/remove", {"drive": drive_id})
                     except Exception as e:
                         logging.warning(
-                            f"⚠️ Could not notify backend of remove for {drive_id}: {e}"
+                            f"Could not notify backend of remove for {drive_id}: {e}"
                         )
                 known_media.pop(drive_id, None)
 
@@ -149,21 +149,21 @@ def monitor_cdrom():
 
             # Remove event
             if prev and not has_media:
-                logging.info(f"📤 Disc removed/ejected from {drive_id}")
+                logging.info(f"Disc removed/ejected from {drive_id}")
                 try:
                     post_api("/api/drives/remove", {"drive": drive_id})
                 except Exception as e:
-                    logging.warning(f"⚠️ Could not notify backend of remove: {e}")
+                    logging.warning(f"Could not notify backend of remove: {e}")
 
             # Insert event
             if not prev and has_media:
-                logging.info(f"📥 Disc inserted in {drive_id}")
+                logging.info(f"Disc inserted in {drive_id}")
                 time.sleep(2)  # debounce
 
                 disc_type = _classify_disc_from_type(type_str or "")
                 disc_label = "unknown"
 
-                logging.info(f"📀 {disc_type.upper()} detected in {drive_id}")
+                logging.info(f"{disc_type.upper()} detected in {drive_id}")
 
                 try:
                     post_api(
@@ -175,9 +175,9 @@ def monitor_cdrom():
                         },
                     )
                 except Exception as e:
-                    logging.error(
-                        f"❌ Detection or job creation failed for {drive_id}: {e}"
-                    )
+                        logging.error(
+                            f"Detection or job creation failed for {drive_id}: {e}"
+                        )
 
             known_media[drive_id] = has_media
 

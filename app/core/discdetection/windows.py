@@ -129,14 +129,27 @@ def _classify_disc(fs_type: str, disc_size: int, mount_point: str) -> str:
     def has_folder(folder: str) -> bool:
         return Path(mount_point, folder).exists() if mount_point else False
 
+    def has_audio_tracks() -> bool:
+        """Detect audio CDs that show up as CDFS with .cda stubs."""
+        try:
+            root = Path(mount_point)
+            return any(p.suffix.lower() == ".cda" for p in root.glob("*.cda"))
+        except OSError:
+            return False
+
+    fs_type_norm = (fs_type or "").lower()
+    audio = has_audio_tracks()
+
     # Windows optical filesystems are typically "udf" or "cdfs" (for ISO9660),
     # so treat "cdfs" like "iso9660".
-    if fs_type in ["udf", "iso9660", "cdfs"]:
+    if fs_type_norm in ["udf", "iso9660", "cdfs"]:
         # Sizes use same thresholds as Linux version
         one_gib = 1 * 1024**3
         twentyfive_gib = 25 * 1024**3
 
-        if disc_size < one_gib:
+        if audio and disc_size < one_gib * 1.2:
+            disc_type = "cd_audio"
+        elif disc_size < one_gib:
             disc_type = "cd_rom"
         elif one_gib <= disc_size <= twentyfive_gib:
             disc_type = "dvd_video" if has_folder("VIDEO_TS") else "dvd_rom"
@@ -145,9 +158,9 @@ def _classify_disc(fs_type: str, disc_size: int, mount_point: str) -> str:
         else:
             disc_type = "unknown"
 
-    elif fs_type == "":
-        # No filesystem reported – likely an audio CD
-        disc_type = "cd_audio"
+    elif fs_type_norm == "":
+        # No filesystem reported – treat as audio if possible.
+        disc_type = "cd_audio" if audio else "unknown"
     else:
         disc_type = "unknown"
 
@@ -178,12 +191,12 @@ def monitor_cdrom(poll_interval: int = 2):
                 if drive not in current_drives:
                     # If a disc was in it, treat as removal/eject
                     if disc_present[drive]:
-                        logging.info(f"📤 Drive {drive} disappeared, treating as eject")
+                        logging.info(f"Drive {drive} disappeared, treating as eject")
                         try:
                             post_api("/api/drives/remove", {"drive": drive})
                         except Exception as e:
                             logging.warning(
-                                f"⚠️ Could not notify backend of drive removal {drive}: {e}"
+                                f"Could not notify backend of drive removal {drive}: {e}"
                             )
                     disc_present.pop(drive, None)
 
@@ -202,8 +215,8 @@ def monitor_cdrom(poll_interval: int = 2):
 
                     disc_type = _classify_disc(fs_type, disc_size, mount_point)
 
-                    logging.info(f"📥 Disc inserted in {drive}")
-                    logging.info(f"📀 {disc_type.upper()} detected in {drive}")
+                    logging.info(f"Disc inserted in {drive}")
+                    logging.info(f"{disc_type.upper()} detected in {drive}")
 
                     try:
                         post_api(
@@ -216,22 +229,22 @@ def monitor_cdrom(poll_interval: int = 2):
                         )
                     except Exception as e:
                         logging.error(
-                            f"❌ Could not notify backend of disc insert in {drive}: {e}"
+                            f"Could not notify backend of disc insert in {drive}: {e}"
                         )
 
                 # Disc removed / ejected
                 elif not present and was_present:
-                    logging.info(f"📤 Disc removed/ejected from {drive}")
+                    logging.info(f"Disc removed/ejected from {drive}")
                     try:
                         post_api("/api/drives/remove", {"drive": drive})
                     except Exception as e:
                         logging.warning(
-                            f"⚠️ Could not notify backend of eject from {drive}: {e}"
+                            f"Could not notify backend of eject from {drive}: {e}"
                         )
 
                 disc_present[drive] = present
 
         except Exception as loop_err:
-            logging.error(f"❌ Error in Windows CDROM monitor loop: {loop_err}")
+            logging.error(f"Error in Windows CDROM monitor loop: {loop_err}")
 
         time.sleep(poll_interval)
