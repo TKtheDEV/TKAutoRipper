@@ -6,6 +6,11 @@
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/gif" href="/static/favicon.ico" />
   <script type="module" src="/static/job_details.js" defer></script>
+  <script type="module">
+    import { initTheme, toggleTheme } from '/static/ui.js';
+    window.toggleTheme = toggleTheme;
+    document.addEventListener('DOMContentLoaded', initTheme);
+  </script>
 </head>
 <body
   data-job-id="{{ job.job_id }}"
