@@ -23,7 +23,6 @@ class DriveTracker:
                 model=model,
                 capability=capability,
                 disc_label=disc_label,
-                device=device,
             )
             self.drives[path] = drive
             return drive
