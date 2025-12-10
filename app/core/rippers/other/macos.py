@@ -9,6 +9,7 @@ from app.core.configmanager import config
 from app.core.integration.dd.macos import build_iso_dump_cmd
 from app.core.integration.zstd.macos import build_zstd_cmd
 from app.core.job.job import Job
+from app.core.drive.manager import drive_tracker
 
 # Step can be (cmd, desc, release, [weight|dest|adapter] ...)
 Step = Tuple[Any, ...]
@@ -97,6 +98,11 @@ def _resolve_raw_device(drive: str) -> str:
       - '/dev/rdisk*' or '/dev/disk*' → pass through
       - anything else → return as-is (dd may fail, but we won't crash here)
     """
+    drv = drive_tracker.get_drive(drive)
+    if drv and drv.device:
+        dev = drv.device
+        return dev
+
     # Logical ID from mac drive detector
     m = re.match(r"DRIVE(\d+)$", drive)
     if m:
@@ -112,9 +118,6 @@ def _resolve_raw_device(drive: str) -> str:
             m2 = re.search(r"Name:\s+(/dev/disk[0-9]+)", out)
             if m2:
                 disk = m2.group(1)
-                # Prefer raw device for speed: /dev/rdiskN
-                if disk.startswith("/dev/disk"):
-                    return disk.replace("/dev/disk", "/dev/rdisk")
                 return disk
         except Exception:
             pass
@@ -140,6 +143,8 @@ def rip_generic_disc(job: Job) -> List[Step]:
 
     # Resolve DRIVE<N> → /dev/rdiskN
     raw_device = _resolve_raw_device(job.drive)
+    if not Path(raw_device).exists():
+        raise RuntimeError(f"Could not resolve device for drive {job.drive} (got {raw_device})")
 
     # temp ISO lives in the job's temp folder
     iso_path = job.temp_path / f"{job.disc_label}.iso"

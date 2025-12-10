@@ -4,6 +4,8 @@ import os
 import shutil
 import re
 
+from app.core.drive.manager import drive_tracker
+
 
 def _candidate_paths() -> List[str]:
     """
@@ -49,6 +51,12 @@ def _normalise_drive_spec(drive_path: str) -> str:
     """
     if not drive_path:
         return "disc:0"
+
+    drv = drive_tracker.get_drive(drive_path)
+    if drv and drv.device:
+        dev = drv.device
+        # Use recorded device as-is (avoid forcing raw if it's problematic)
+        return f"dev:{dev}"
 
     # Logical ID from mac drive detector: DRIVE0, DRIVE1, ...
     m = re.match(r"DRIVE(\d+)$", drive_path, re.IGNORECASE)

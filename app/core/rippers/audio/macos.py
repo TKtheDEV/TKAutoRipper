@@ -5,6 +5,7 @@ import re
 from app.core.integration.abcde.macos import run_abcde
 from app.core.configmanager import config
 from app.core.job.job import Job
+from app.core.rippers.other.macos import _resolve_raw_device
 
 
 class AbcdeProgressAdapter:
@@ -53,8 +54,9 @@ def rip_audio_cd(job: Job) -> List[Tuple]:
     can stay OS-agnostic.
     """
     cd_cfg = config.section("CD")
+    resolved_drive = _resolve_raw_device(job.drive)
     cmd = run_abcde(
-        drive_path=job.drive,
+        drive_path=resolved_drive,
         output_format=cd_cfg["outputformat"],
         config_path=cd_cfg["configpath"],
         additional_options=cd_cfg["additionaloptions"],

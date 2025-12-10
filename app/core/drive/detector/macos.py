@@ -7,6 +7,11 @@ from typing import List
 
 from app.core.drive.manager import drive_tracker
 from app.core.job.tracker import job_tracker
+from app.core.drive.mac_state import (
+    drive_id_for,
+    update_mapping,
+    forget_drive,
+)
 
 
 def _safe_run(cmd: list[str]) -> str:
@@ -24,30 +29,42 @@ def _safe_run(cmd: list[str]) -> str:
 
 def _list_optical_drives() -> list[int]:
     """
-    Use `drutil list` to enumerate attached optical drives.
+    Probe `drutil status -drive N` across a reasonable range to discover drives.
 
-    Returns a list of drive indices: [0, 1, ...].
-
-    If `drutil list` is empty but `drutil info` works, we fall back to [0].
+    `drutil list` is unreliable with some USB enclosures; status probing tends
+    to be more consistent when multiple drives are attached.
     """
-    out = _safe_run(["drutil", "list"])
     indices: list[int] = []
+    for idx in range(0, 12):
+        status_out = _safe_run(["drutil", "status", "-drive", str(idx)])
+        if status_out.strip():
+            indices.append(idx)
+    return sorted(set(indices))
 
+
+def _status_device(index: int) -> tuple[str | None, str | None]:
+    """
+    Return (device_path, type_string) from drutil status for a given index.
+    """
+    if index == 0:
+        out = _safe_run(["drutil", "status"])
+        if not out.strip():
+            out = _safe_run(["drutil", "status", "-drive", "0"])
+    else:
+        out = _safe_run(["drutil", "status", "-drive", str(index)])
+
+    if not out.strip():
+        return (None, None)
+
+    dev_path = None
+    type_str = None
     for line in out.splitlines():
-        m = re.match(r"\s*(\d+):\s+(.*)$", line.strip())
-        if not m:
-            continue
-        idx = int(m.group(1))
-        indices.append(idx)
-
-    # Fallback: some macOS / drives don't give a nice "0: ..." line in `drutil list`,
-    # but `drutil info` still works. Assume single drive at index 0 in that case.
-    if not indices:
-        info_out = _safe_run(["drutil", "info"])
-        if info_out.strip():
-            indices = [0]
-
-    return indices
+        m_dev = re.search(r"Name:\s+(/dev/disk\S+)", line)
+        if m_dev:
+            dev_path = m_dev.group(1)
+        if line.strip().startswith("Type:"):
+            type_str = line.split(":", 1)[1].strip()
+    return (dev_path, type_str)
 
 
 def _get_drive_model(index: int) -> str:
@@ -120,22 +137,44 @@ def poll_for_drives(interval: int = 5):
     This means they appear in the UI even when empty (like Linux/Windows),
     and we can still distinguish multiple drives.
     """
+    miss_counts: dict[str, int] = {}
+
     while True:
         indices = _list_optical_drives()
-        current_ids = {f"DRIVE{idx}" for idx in indices}
+        current_ids: set[str] = set()
+        device_owner = {
+            d.device: d.path for d in drive_tracker.get_all_drives() if d.device
+        }
 
         # --- Add new drives ---
         for idx in indices:
-            drive_id = f"DRIVE{idx}"
+            dev_path, type_str = _status_device(idx)
+            drive_id = drive_id_for(idx, dev_path)
+            if dev_path:
+                update_mapping(drive_id, dev_path)
+
+            current_ids.add(drive_id)
+
             if not drive_tracker.get_drive(drive_id):
                 model = _get_drive_model(idx)
                 cap = _get_drive_capability(idx)
-                drive_tracker.register_drive(path=drive_id, model=model, capability=cap)
+                drive_tracker.register_drive(
+                    path=drive_id, model=model, capability=cap, device=dev_path
+                )
                 print(f"📦 Registered drive: {drive_id} ({model}) [{cap}]")
+            else:
+                # update device if we learned it
+                if dev_path:
+                    drive_tracker.set_device(drive_id, dev_path)
 
         # --- Remove stale drives ---
         tracked_devs = {d.path for d in drive_tracker.get_all_drives()}
         for dev in tracked_devs - current_ids:
+            miss_counts[dev] = miss_counts.get(dev, 0) + 1
+            # tolerate a couple of empty/failed drutil polls before treating as gone
+            if miss_counts[dev] < 3:
+                continue
+
             d = drive_tracker.get_drive(dev)
             if d:
                 if d.job_id:
@@ -149,5 +188,11 @@ def poll_for_drives(interval: int = 5):
                         )
                 drive_tracker.unregister_drive(dev)
                 print(f"🗑️ Unregistered unplugged drive: {dev}")
+            forget_drive(dev)
+            miss_counts.pop(dev, None)
+
+        # reset miss counter for drives that are present again
+        for dev in tracked_devs & current_ids:
+            miss_counts.pop(dev, None)
 
         time.sleep(interval)

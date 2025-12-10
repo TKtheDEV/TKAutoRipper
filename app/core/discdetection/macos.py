@@ -7,6 +7,13 @@ import re
 
 from ..api_helpers import post_api
 from ..configmanager import config  # not used yet, kept for structure
+from app.core.drive.manager import drive_tracker
+from app.core.drive.mac_state import (
+    drive_id_for,
+    update_mapping,
+    device_for_drive,
+    forget_drive,
+)
 
 
 def _safe_run(cmd: list[str]) -> str:
@@ -24,31 +31,23 @@ def _safe_run(cmd: list[str]) -> str:
 
 def _list_optical_drives() -> list[int]:
     """
-    Return a list of optical drive indices using `drutil list`,
-    with a fallback to [0] if list is empty but `drutil info` works.
+    Probe `drutil status -drive N` across a reasonable range to discover drives.
+
+    `drutil list` is unreliable with some USB enclosures; status probing tends
+    to be more consistent when multiple drives are attached.
     """
-    out = _safe_run(["drutil", "list"])
     indices: list[int] = []
-
-    for line in out.splitlines():
-        m = re.match(r"\s*(\d+):\s+(.*)$", line.strip())
-        if not m:
-            continue
-        idx = int(m.group(1))
-        indices.append(idx)
-
-    if not indices:
-        info_out = _safe_run(["drutil", "info"])
-        if info_out.strip():
-            indices = [0]
-
-    return indices
+    for idx in range(0, 12):
+        t, d = _drutil_status(idx)
+        if t or d:
+            indices.append(idx)
+    return sorted(set(indices))
 
 
-def _drutil_status_type(index: int) -> str | None:
+def _drutil_status(index: int) -> tuple[str | None, str | None]:
     """
     Run `drutil status -drive <index>` (or fallback `drutil status`)
-    and return the 'Type:' string, e.g.:
+    and return (type, device_path) where type is e.g.:
 
         "No Media Inserted"
         "DVD-ROM"
@@ -56,36 +55,56 @@ def _drutil_status_type(index: int) -> str | None:
         "BD-RE"
     """
     if index == 0:
-        out = _safe_run(["drutil", "status"])
+        cmd = ["drutil", "status"]
+        out = _safe_run(cmd)
         if not out.strip():
-            out = _safe_run(["drutil", "status", "-drive", "0"])
+            out = _safe_run(cmd + ["-drive", "0"])
     else:
-        out = _safe_run(["drutil", "status", "-drive", str(index)])
+        cmd = ["drutil", "status", "-drive", str(index)]
+        out = _safe_run(cmd)
 
     if not out:
-        return None
+        return (None, None)
+
+    type_str: str | None = None
+    dev_path: str | None = None
 
     for raw_line in out.splitlines():
         line = raw_line.strip()
         if line.startswith("Type:"):
-            return line.split(":", 1)[1].strip()
-    return None
+            type_str = line.split(":", 1)[1].strip()
+        m = re.search(r"Name:\s+(/dev/disk\S+)", line)
+        if m:
+            dev_path = m.group(1)
+    return (type_str, dev_path)
 
 
-def _classify_disc_from_type(type_str: str) -> str:
+def _diskutil_content(dev_path: str) -> str:
     """
-    Rough classification from `drutil status` Type line.
-
-    This is not as detailed as the Linux fs/size logic, but it's enough to
-    pick the right ripper:
-
-      - contains 'cd-da' or 'audio'     -> cd_audio
-      - contains 'bd' or 'blu-ray'      -> bluray_video
-      - contains 'dvd'                  -> dvd_video
-      - contains 'cd'                   -> cd_rom
-      - else                            -> other_disc
+    Return the Content/IOContent line from `diskutil info`, lowercased.
     """
-    t = type_str.lower()
+    try:
+        res = subprocess.run(
+            ["diskutil", "info", dev_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = res.stdout or ""
+        for line in out.splitlines():
+            m = re.search(r"Content.*:\s*(.+)", line)
+            if m:
+                return m.group(1).strip().lower()
+    except Exception:
+        pass
+    return ""
+
+
+def _classify_disc_from_type(type_str: str, dev_path: str | None) -> str:
+    """
+    Classification from `drutil status` Type line with a diskutil content hint.
+    """
+    t = (type_str or "").lower()
 
     if "no media" in t:
         return "unknown"
@@ -97,7 +116,18 @@ def _classify_disc_from_type(type_str: str) -> str:
     if "dvd" in t:
         return "dvd_video"
     if "cd" in t:
+        # If diskutil says audio/cdda treat as audio, otherwise CD-ROM
+        content = _diskutil_content(dev_path) if dev_path else ""
+        if any(x in content for x in ["audio", "cdda", "cd-da"]):
+            return "cd_audio"
         return "cd_rom"
+
+    # Fallback: look at diskutil content hint
+    content = _diskutil_content(dev_path) if dev_path else ""
+    if any(x in content for x in ["audio", "cdda", "cd-da"]):
+        return "cd_audio"
+    if "udf" in content or "iso" in content:
+        return "dvd_video"
 
     return "other_disc"
 
@@ -122,30 +152,41 @@ def monitor_cdrom():
 
     # known_media[drive_id] = bool (True if disc present)
     known_media: dict[str, bool] = {}
+    # drive_devices[drive_id] = last seen /dev/diskN mapping (if any)
+    # consecutive polls where a drive was missing from drutil list
+    miss_counts: dict[str, int] = {}
     poll_interval = 3
 
     while True:
         indices = _list_optical_drives()
-        current_ids = {f"DRIVE{idx}" for idx in indices}
-
-        # If a drive disappeared, treat it like the disc was removed
-        for drive_id in list(known_media.keys()):
-            if drive_id not in current_ids:
-                if known_media.get(drive_id, False):
-                    logging.info(f"Drive disappeared, assuming disc removed: {drive_id}")
-                    try:
-                        post_api("/api/drives/remove", {"drive": drive_id})
-                    except Exception as e:
-                        logging.warning(
-                            f"Could not notify backend of remove for {drive_id}: {e}"
-                        )
-                known_media.pop(drive_id, None)
-
+        current_ids: set[str] = set()
         for idx in indices:
-            drive_id = f"DRIVE{idx}"
-            type_str = _drutil_status_type(idx)
+            type_str, dev_path = _drutil_status(idx)
+            if type_str is None:
+                # drutil failed for this drive; keep previous state
+                continue
+
+            drive_id = drive_id_for(idx, dev_path)
+
+            # If drutil didn't give a device, use the last known one for this drive
+            dev_path = dev_path or device_for_drive(drive_id)
+
             has_media = bool(type_str and "no media" not in type_str.lower())
             prev = known_media.get(drive_id, False)
+            current_ids.add(drive_id)
+
+            if has_media and dev_path:
+                update_mapping(drive_id, dev_path)
+                drv = drive_tracker.get_drive(drive_id)
+                if not drv:
+                    drive_tracker.register_drive(
+                        path=drive_id,
+                        model="Unknown",
+                        capability=["Unknown"],
+                        device=dev_path,
+                    )
+                else:
+                    drive_tracker.set_device(drive_id, dev_path)
 
             # Remove event
             if prev and not has_media:
@@ -160,10 +201,12 @@ def monitor_cdrom():
                 logging.info(f"Disc inserted in {drive_id}")
                 time.sleep(2)  # debounce
 
-                disc_type = _classify_disc_from_type(type_str or "")
+                disc_type = _classify_disc_from_type(type_str or "", dev_path)
                 disc_label = "unknown"
 
                 logging.info(f"{disc_type.upper()} detected in {drive_id}")
+                if dev_path:
+                    logging.info(f"Mapping {drive_id} → {dev_path}")
 
                 try:
                     post_api(
@@ -175,10 +218,32 @@ def monitor_cdrom():
                         },
                     )
                 except Exception as e:
-                        logging.error(
-                            f"Detection or job creation failed for {drive_id}: {e}"
-                        )
+                    logging.error(
+                        f"Detection or job creation failed for {drive_id}: {e}"
+                    )
 
             known_media[drive_id] = has_media
+
+        # Handle disappearing drives after processing current indices
+        for drive_id in list(known_media.keys()):
+            if drive_id not in current_ids:
+                miss_counts[drive_id] = miss_counts.get(drive_id, 0) + 1
+                if miss_counts[drive_id] < 3:
+                    continue
+                if known_media.get(drive_id, False):
+                    logging.info(
+                        f"Drive disappeared after {miss_counts[drive_id]} polls, assuming disc removed: {drive_id}"
+                    )
+                    try:
+                        post_api("/api/drives/remove", {"drive": drive_id})
+                    except Exception as e:
+                        logging.warning(
+                            f"Could not notify backend of remove for {drive_id}: {e}"
+                        )
+                known_media.pop(drive_id, None)
+                forget_drive(drive_id)
+                miss_counts.pop(drive_id, None)
+            else:
+                miss_counts.pop(drive_id, None)
 
         time.sleep(poll_interval)

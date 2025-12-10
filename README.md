@@ -118,6 +118,6 @@ python3 -m venv venv
 
 # 3) Activate venv (required every time you want to start the program)
 source venv/bin/activate
-pip install -r installer/requirements_mac.txt
+pip install -r installer/requirements_macos.txt
 python3 main.py
 ```

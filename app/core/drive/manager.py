@@ -10,9 +10,22 @@ class DriveTracker:
         self.drives: Dict[str, Drive] = {}
         self.lock = threading.Lock()
 
-    def register_drive(self, path: str, model: str, capability: List[str], disc_label: Optional[str] = None) -> Drive:
+    def register_drive(
+        self,
+        path: str,
+        model: str,
+        capability: List[str],
+        disc_label: Optional[str] = None,
+        device: Optional[str] = None,
+    ) -> Drive:
         with self.lock:
-            drive = Drive(path=path, model=model, capability=capability, disc_label=disc_label)
+            drive = Drive(
+                path=path,
+                model=model,
+                capability=capability,
+                disc_label=disc_label,
+                device=device,
+            )
             self.drives[path] = drive
             return drive
 
@@ -52,6 +65,12 @@ class DriveTracker:
 
     def get_all_drives(self) -> List[Drive]:
         return list(self.drives.values())
+
+    def set_device(self, path: str, device: Optional[str]) -> None:
+        """Record the OS device path backing this logical drive ID."""
+        with self.lock:
+            if path in self.drives:
+                self.drives[path].device = device
 
 
 drive_tracker = DriveTracker()
