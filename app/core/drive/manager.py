@@ -16,7 +16,6 @@ class DriveTracker:
         model: str,
         capability: List[str],
         disc_label: Optional[str] = None,
-        device: Optional[str] = None,
     ) -> Drive:
         with self.lock:
             drive = Drive(
@@ -65,12 +64,6 @@ class DriveTracker:
 
     def get_all_drives(self) -> List[Drive]:
         return list(self.drives.values())
-
-    def set_device(self, path: str, device: Optional[str]) -> None:
-        """Record the OS device path backing this logical drive ID."""
-        with self.lock:
-            if path in self.drives:
-                self.drives[path].device = device
 
 
 drive_tracker = DriveTracker()

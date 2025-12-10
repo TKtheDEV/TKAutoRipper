@@ -12,7 +12,6 @@ class Drive:
     job_id: Optional[str] = None
     disc_label: Optional[str] = None
     blacklisted: bool = False
-    device: Optional[str] = None
 
     @property
     def is_available(self):
