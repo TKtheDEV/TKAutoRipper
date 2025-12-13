@@ -9,6 +9,5 @@ def build_zstd_cmd(input_path: Path, output_path: Path) -> List[str]:
         "-v",        # verbose → progress %
         "-T0",       # all cores
         str(input_path),
-        "-o",
-        str(output_path),
+        "-o", str(output_path),
     ]

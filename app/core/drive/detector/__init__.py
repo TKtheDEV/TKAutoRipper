@@ -7,7 +7,6 @@ if system == "linux":
     from .linux import _get_drive_model
     from .linux import poll_for_drives
 elif system == "darwin":
-    from .macos import _get_drive_model
     from .macos import poll_for_drives
 elif system == "windows":
     from .windows import _get_drive_model

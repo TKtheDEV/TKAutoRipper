@@ -6,7 +6,8 @@ from typing import Optional, List
 
 @dataclass
 class Drive:
-    path: str
+    id: Optional[str]
+    path: Optional[str]
     model: str
     capability: List[str]
     job_id: Optional[str] = None
