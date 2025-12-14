@@ -3,11 +3,12 @@ from pathlib import Path
 from typing import List, Tuple, Any
 import re
 import subprocess
+import shlex
 
 from app.core.configmanager import config
 from app.core.integration.dd.linux import build_iso_dump_cmd
 from app.core.integration.zstd.linux import build_zstd_cmd
-from app.core.job.job import Job
+from app.core.job.job import Job, sanitize_folder
 
 # Step can be (cmd, desc, release, [weight|dest|adapter] ...)
 Step = Tuple[Any, ...]
@@ -85,7 +86,8 @@ def rip_generic_disc(job: Job) -> List[Step]:
     comp_alg = str(cfg.get("compression", "zstd")).lower()
 
     # temp ISO lives in the job's temp folder
-    iso_path = job.temp_path / f"{job.disc_label}.iso"
+    label = sanitize_folder(job.disc_label or "DISC") or "DISC"
+    iso_path = job.temp_path / f"{label}.iso"
 
     # Treat job.output_path as the desired final FILE path; if it lacks a suffix,
     # build one based on compression settings.
@@ -99,11 +101,11 @@ def rip_generic_disc(job: Job) -> List[Step]:
 
     if not filename:
         if use_comp and comp_alg == "zstd":
-            filename = f"{job.disc_label}.iso.zst"
+            filename = f"{label}.iso.zst"
         elif use_comp and comp_alg in {"bz2", "bzip2"}:
-            filename = f"{job.disc_label}.iso.bz2"
+            filename = f"{label}.iso.bz2"
         else:
-            filename = f"{job.disc_label}.iso"
+            filename = f"{label}.iso"
     else:
         if use_comp and comp_alg == "zstd" and not filename.endswith(".zst"):
             filename = filename + ".zst"
@@ -130,7 +132,6 @@ def rip_generic_disc(job: Job) -> List[Step]:
                 build_zstd_cmd(iso_path, final_path),
                 "Compressing ISO (zstd)",
                 False,
-                0.5,
                 final_path,
             )
         )
@@ -140,11 +141,10 @@ def rip_generic_disc(job: Job) -> List[Step]:
                 [
                     "bash",
                     "-lc",
-                    f'bzip2 -v -k -f "{iso_path}" && mv "{iso_path}.bz2" "{final_path}"',
+                    f"bzip2 -v -k -f {shlex.quote(str(iso_path))} && mv {shlex.quote(str(iso_path))}.bz2 {shlex.quote(str(final_path))}",
                 ],
                 "Compressing ISO (bzip2)",
                 False,
-                0.5,
                 final_path,
             )
         )
@@ -154,7 +154,6 @@ def rip_generic_disc(job: Job) -> List[Step]:
                 ["cp", "-f", str(iso_path), str(final_path)],
                 "Copying ISO to final destination",
                 False,
-                0.5,
                 final_path,
             )
         )
