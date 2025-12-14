@@ -165,7 +165,6 @@ def set_output(job_id: str, payload: dict = Body(...)):
                 status_code=400,
                 detail="For video/audio discs, output must be a folder (no filename).",
             )
-        p.mkdir(parents=True, exist_ok=True)
         job.output_path = p
         return {
             "status": "ok",
@@ -215,7 +214,6 @@ def set_output(job_id: str, payload: dict = Body(...)):
             status_code=400,
             detail="Output must be a folder for this disc type.",
         )
-    p.mkdir(parents=True, exist_ok=True)
     job.output_path = p
     return {
         "status": "ok",

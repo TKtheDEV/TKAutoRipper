@@ -73,9 +73,41 @@ function updateSystemInfo(){
 async function updateDrives(){
   const drives = await fetchJSON('/api/drives');
   const container = document.getElementById('drives');
+  container.classList.add('drives-grid');
   container.innerHTML = '';
 
-  // Overview omitted for brevity; keep yours or previous version…
+  // --- Drive overview (counts + quick-eject buttons) ---
+  const caps = { CD: { total: 0, available: 0 }, DVD: { total: 0, available: 0 }, BLURAY: { total: 0, available: 0 } };
+  const capInheritance = { CD: ['CD', 'DVD', 'BLURAY'], DVD: ['DVD', 'BLURAY'], BLURAY: ['BLURAY'] };
+  const blacklisted = [];
+
+  for (const drive of drives) {
+    if (drive.blacklisted) blacklisted.push(drive);
+    for (const level of ['CD', 'DVD', 'BLURAY']) {
+      if (drive.capability.some(cap => capInheritance[level].includes(cap))) {
+        caps[level].total += 1;
+        if (!drive.job_id && !drive.blacklisted) caps[level].available += 1;
+      }
+    }
+  }
+
+  const overview = document.createElement('div');
+  overview.className = 'card card--drive-overview';
+  overview.innerHTML = `
+    <h3>Drive Overview</h3>
+    <div class="counts">
+      <div class="count-row"><span>CD</span><strong class="${caps.CD.available ? 'ok' : 'bad'}">${caps.CD.available}</strong><span>/ ${caps.CD.total}</span></div>
+      <div class="count-row"><span>DVD</span><strong class="${caps.DVD.available ? 'ok' : 'bad'}">${caps.DVD.available}</strong><span>/ ${caps.DVD.total}</span></div>
+      <div class="count-row"><span>BD</span><strong class="${caps.BLURAY.available ? 'ok' : 'bad'}">${caps.BLURAY.available}</strong><span>/ ${caps.BLURAY.total}</span></div>
+    </div>
+    ${blacklisted.length ? `<div class="muted">Blacklisted: ${blacklisted.map(d => d.model).join(', ')}</div>` : ''}
+    <div class="btn-col">
+      <button class="btn btn--ghost" data-eject-type="CD" ${caps.CD.available === 0 ? 'disabled' : ''}>Rip CD</button>
+      <button class="btn btn--ghost" data-eject-type="DVD" ${caps.DVD.available === 0 ? 'disabled' : ''}>Rip DVD</button>
+      <button class="btn btn--ghost" data-eject-type="BLURAY" ${caps.BLURAY.available === 0 ? 'disabled' : ''}>Rip BD</button>
+    </div>
+  `;
+  container.appendChild(overview);
 
   for (const d of drives){
     const div = document.createElement('div');
@@ -109,6 +141,32 @@ async function ejectDrive(path, confirmCancel=false){
 on(document,'button.eject-btn','click',(e,btn)=>{
   const path = decodeURIComponent(btn.dataset.path); const hasJob = btn.dataset.hasjob==='true';
   ejectDrive(path, hasJob);
+});
+
+async function ejectForType(type){
+  try{
+    const drives = await fetchJSON('/api/drives');
+    const capOrder = { CD: 0, DVD: 1, BLURAY: 2 };
+    const capInheritance = { CD: ['CD', 'DVD', 'BLURAY'], DVD: ['DVD', 'BLURAY'], BLURAY: ['BLURAY'] };
+    const match = drives
+      .filter(d => !d.job_id && !d.blacklisted && d.capability.some(c => capInheritance[type].includes(c)))
+      .sort((a, b) => {
+        const aCap = Math.min(...a.capability.map(c => capOrder[c] ?? 99));
+        const bCap = Math.min(...b.capability.map(c => capOrder[c] ?? 99));
+        return aCap - bCap;
+      })[0];
+    if (!match){
+      showToast(`No available drive can handle ${type}`, 'error');
+      return;
+    }
+    await ejectDrive(match.path, false);
+  }catch(err){
+    showToast(`No available drive can handle ${type}`, 'error');
+  }
+}
+on(document, 'button[data-eject-type]', 'click', (_e, btn)=> {
+  const type = btn.dataset.ejectType;
+  if (type) ejectForType(type);
 });
 
 // ====== Jobs (Cancel/Delete in the same spot; Retry when step >= 2) ======

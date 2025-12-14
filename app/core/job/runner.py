@@ -294,7 +294,11 @@ class JobRunner:
         Start from the step AFTER the last successful one.
         Caller guarantees job.step >= 2 (API side).
         """
-        start_index = max(2, int(getattr(self.job, "step", 1) or 1) + 1)
+        current_step = int(getattr(self.job, "step", 1) or 1)
+        # If the current step was incomplete, retry it; otherwise move to the next one.
+        step_progress = int(getattr(self.job, "step_progress", 0) or 0)
+        start_index = current_step if step_progress < 100 else current_step + 1
+        start_index = max(1, start_index)
         threading.Thread(target=self._run_steps, args=(start_index,), daemon=True).start()
 
     def cancel(self) -> None:
@@ -325,6 +329,7 @@ class JobRunner:
 
                 dtype = (self.job.disc_type or "").lower()
                 is_rom = dtype in {"cd_rom", "dvd_rom", "bluray_rom", "other_disc"}
+                is_video = dtype in {"dvd_video", "bluray_video"}
 
                 # normalize weights / dest / progress adapter
                 def _has_adapter(x: Any) -> bool:
@@ -395,8 +400,8 @@ class JobRunner:
 
                     cmd, description, release_after, weight, dest, progress_adapter = step_tuple
 
-                    # --- Rebuild ROM steps at runtime to pick up renamed output path
-                    if is_rom and idx >= 2:
+                    # --- Rebuild steps at runtime to pick up renamed output paths (ROM/VIDEO)
+                    if (is_rom or is_video) and idx >= 2:
                         fresh_raw = get_job_steps(self.job)
                         if 1 <= idx <= len(fresh_raw):
                             fresh = fresh_raw[idx - 1]
