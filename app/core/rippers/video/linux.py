@@ -12,9 +12,11 @@ All paths are absolute so it works no matter what cwd the runner uses.
 
 from pathlib import Path
 from typing import List, Tuple
+import logging
 import shlex
 
 from app.core.configmanager import config
+from app.core.integration.makemkv.betakey import refresh_beta_key_if_enabled
 from app.core.integration.makemkv.linux import build_makemkv_cmd
 from app.core.integration.handbrake.linux import build_handbrake_cmd
 from app.core.job.job import Job
@@ -42,6 +44,11 @@ def rip_video_disc(job: Job, disc_type: str) -> List[Tuple[List[str], str, bool,
     temp_dir: Path = job.temp_path
     output_dir: Path = job.output_path
     progress_txt = temp_dir / "makemkv_progress.txt"
+
+    try:
+        refresh_beta_key_if_enabled()
+    except Exception as e:
+        logging.warning("MakeMKV beta key auto-renewal failed before rip: %s", e)
 
     # ── Step 1: MakeMKV ──────────────────────────────────────
     makemkv_cmd = build_makemkv_cmd(

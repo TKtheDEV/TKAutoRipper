@@ -33,6 +33,36 @@ def _get_drive_capability(dev: str) -> List[str]:
     except Exception:
         return []
 
+def _is_unknown_model(model: Optional[str]) -> bool:
+    return not model or model.strip().lower() == "unknown"
+
+def _is_unknown_capability(capability: Optional[List[str]]) -> bool:
+    if not capability:
+        return True
+    return all((not c or c.strip().lower() == "unknown") for c in capability)
+
+def _refresh_unknown_drive(dev: str) -> None:
+    drive = drive_tracker.get_drive(dev)
+    if not drive:
+        return
+
+    if not _is_unknown_model(drive.model) and not _is_unknown_capability(drive.capability):
+        return
+
+    model = _get_drive_model(dev)
+    capability = _get_drive_capability(dev)
+
+    next_model = model if not _is_unknown_model(model) else drive.model
+    next_capability = capability if not _is_unknown_capability(capability) else drive.capability
+
+    if next_model != drive.model or next_capability != drive.capability:
+        drive_tracker.register_drive(
+            path=dev,
+            model=next_model,
+            capability=next_capability,
+        )
+        print(f"🔄 Updated drive info: {dev} ({next_model}) [{next_capability}]")
+
 def poll_for_drives(interval: int = 5):
     """Poll /dev/sr* and sync with DriveTracker."""
     while True:
@@ -46,8 +76,12 @@ def poll_for_drives(interval: int = 5):
                 drive_tracker.register_drive(path=dev, model=model, capability=cap)
                 print(f"📦 Registered drive: {dev} ({model}) [{cap}]")
 
+        # Refresh drives that were registered before udev exposed full metadata.
+        for dev in current_devs:
+            _refresh_unknown_drive(dev)
+
         # Remove stale drives
-        tracked_devs = {d.path for d in drive_tracker.get_all_drives()}
+        tracked_devs = {d.path for d in drive_tracker.get_all_drives() if d.path}
         for dev in tracked_devs - current_devs:
             d = drive_tracker.get_drive(dev)
             if d:

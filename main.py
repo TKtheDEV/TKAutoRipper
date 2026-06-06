@@ -16,6 +16,7 @@ from app.api import settings
 from app.api import systeminfo
 from app.api import ws_log
 from app.core.auth import verify_web_auth
+from app.core.integration.makemkv.betakey import refresh_beta_key_if_enabled
 import app.core.discdetection as discdetection
 import app.core.drive.detector as drive_detector
 
@@ -28,7 +29,7 @@ app.mount("/static", StaticFiles(directory="app/frontend/static"), name="static"
 # Secure dashboard
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(verify_web_auth)])
 def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "dashboard.html")
 
 
 def generate_ssl_cert(cert_file: Path, key_file: Path):
@@ -70,6 +71,11 @@ if __name__ == "__main__":
     if not cert_file.exists() or not key_file.exists():
         # If we cannot create a cert, we fail fast (HTTPS-only requirement).
         generate_ssl_cert(cert_file, key_file)
+
+    try:
+        refresh_beta_key_if_enabled()
+    except Exception as e:
+        logging.warning("MakeMKV beta key auto-renewal failed: %s", e)
 
     # Background watchers (Linux MVP)
     threading.Thread(target=drive_detector.poll_for_drives, daemon=True).start()

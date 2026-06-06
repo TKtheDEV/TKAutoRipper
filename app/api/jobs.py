@@ -28,7 +28,9 @@ def job_details_page(request: Request, job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return templates.TemplateResponse(
-        "job_details.html", {"request": request, "job": job}
+        request,
+        "job_details.html",
+        {"job": job},
     )
 
 

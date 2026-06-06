@@ -5,16 +5,21 @@ from fastapi.responses import HTMLResponse
 from app.core.templates import templates
 from app.core.auth import verify_web_auth
 from app.core.configmanager import config
+from app.core.integration.makemkv.betakey import (
+    refresh_beta_key_if_enabled,
+    write_makemkv_app_key,
+)
 
 router = APIRouter()
 
 
 @router.get("/settings", response_class=HTMLResponse, dependencies=[Depends(verify_web_auth)])
 def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
-        "config": config._config_raw
-    })
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"config": config._config_raw},
+    )
 
 
 @router.post("/settings", dependencies=[Depends(verify_web_auth)])
@@ -39,6 +44,10 @@ def update_setting(
 
         config.set(section, key, value)
         config.save()
+        if section == "General" and key == "makemkvautobetakeyrenewal" and value:
+            refresh_beta_key_if_enabled(force=True)
+        elif section == "General" and key == "makemkvlicensekey" and value:
+            write_makemkv_app_key(value)
         return f"<script>showToast('✅ Saved {section}.{key}', 'success')</script>"
 
     except Exception as e:

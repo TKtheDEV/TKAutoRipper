@@ -15,7 +15,30 @@ class ConfigManager:
             raise FileNotFoundError(f"Config file not found: {self.config_path}")
         with open(self.config_path, 'r') as f:
             self._config_raw = yaml.safe_load(f)
+        self._merge_default_config()
         self._flatten_config()
+
+    def _merge_default_config(self):
+        default_path = Path(__file__).resolve().parents[2] / "config" / "TKAutoRipper.conf"
+        if default_path == self.config_path or not default_path.exists():
+            return
+        try:
+            with open(default_path, "r", encoding="utf-8") as f:
+                defaults = yaml.safe_load(f) or {}
+        except Exception:
+            return
+        changed = False
+        for section, entries in defaults.items():
+            if section not in self._config_raw:
+                self._config_raw[section] = entries
+                changed = True
+                continue
+            for key, entry in entries.items():
+                if key not in self._config_raw[section]:
+                    self._config_raw[section][key] = entry
+                    changed = True
+        if changed:
+            self.save()
 
     def _flatten_config(self):
         flat = {}
