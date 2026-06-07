@@ -86,6 +86,14 @@ python3 main.py
 - MakeMKV needs to be installed
 - HandBrakeCLI needs to be installed
 
+Or let the Windows installer set up Python, OpenSSL, HandBrake, MakeMKV,
+configuration files, and the local virtualenv:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\installer\windows.ps1
+.\start_windows.cmd
+```
+
 ```bash
 # 1) Clone the repo
 cd /D %HOMEDRIVE%%HOMEPATH%
