@@ -589,6 +589,9 @@ setup_app_directories() {
   info "Installing default config files into $config_root..."
   for file in config/*; do
     [ -f "$file" ] || continue
+    if [ "$(basename "$file")" = "credentials.conf" ]; then
+      continue
+    fi
     local target="$config_root/$(basename "$file")"
     if [ -e "$target" ]; then
       note "Keeping existing config: $target"
@@ -596,6 +599,12 @@ setup_app_directories() {
       cp "$file" "$target"
     fi
   done
+
+  if [ ! -e "$config_root/credentials.conf" ] && [ -e "config/credentials.example.conf" ]; then
+    info "Creating credentials file: $config_root/credentials.conf"
+    cp "config/credentials.example.conf" "$config_root/credentials.conf"
+    chmod 600 "$config_root/credentials.conf" 2>/dev/null || true
+  fi
 }
 
 setup_python_venv() {

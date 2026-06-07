@@ -1,25 +1,33 @@
 # configmanager.py
-import yaml
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+import yaml
 
 
 class ConfigManager:
-    def __init__(self, config_path: Path):
+    def __init__(self, config_path: Path, default_path: Optional[Path] = None):
         self.config_path = config_path.expanduser()
+        self.default_path = default_path
         self._config_raw: Dict[str, Any] = {}
         self._config_flat: Dict[str, Any] = {}
 
     def load(self):
+        if not self.config_path.exists() and self.default_path and self.default_path.exists():
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            self.config_path.write_text(
+                self.default_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
         if not self.config_path.exists():
             raise FileNotFoundError(f"Config file not found: {self.config_path}")
         with open(self.config_path, 'r') as f:
-            self._config_raw = yaml.safe_load(f)
+            self._config_raw = yaml.safe_load(f) or {}
         self._merge_default_config()
         self._flatten_config()
 
     def _merge_default_config(self):
-        default_path = Path(__file__).resolve().parents[2] / "config" / "TKAutoRipper.conf"
+        default_path = self.default_path or Path(__file__).resolve().parents[2] / "config" / "TKAutoRipper.conf"
         if default_path == self.config_path or not default_path.exists():
             return
         try:

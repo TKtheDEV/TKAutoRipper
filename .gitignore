@@ -1,5 +1,6 @@
 config/cert.pem
 config/key.pem
+config/credentials.conf
 output/
 temp/
 .DS_Store

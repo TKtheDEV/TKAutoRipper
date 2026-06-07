@@ -8,6 +8,7 @@ import platform
 from app.core.auth import verify_web_auth
 from app.core.templates import templates
 from app.core.configmanager import config
+from app.core.credentials import credentials
 from app.core.job.tracker import job_tracker
 from app.core.job.runner import JobRunner
 
@@ -265,9 +266,11 @@ def retry_job(job_id: str):
 
 
 def _omdb_key() -> str:
-    key = config.section("General").get("omdbapikey") or config.section(
-        "GENERAL"
-    ).get("omdbapikey")
+    key = (
+        credentials.section("Credentials").get("omdbapikey")
+        or config.section("General").get("omdbapikey")
+        or config.section("GENERAL").get("omdbapikey")
+    )
     if not key:
         raise HTTPException(
             status_code=400, detail="OMDb API key not configured"
