@@ -1,0 +1,1 @@
+# LibreHardwareMonitor integration package.

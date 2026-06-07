@@ -17,6 +17,7 @@ param(
     [switch]$SkipOpenSSL,
     [switch]$SkipHandBrake,
     [switch]$SkipMakeMKV,
+    [switch]$SkipLibreHardwareMonitor,
     [switch]$NoShortcut,
     [switch]$ForceWingetInstall
 )
@@ -164,6 +165,44 @@ function Test-MakeMKV {
     return (Test-Command "makemkvcon64.exe")
 }
 
+function Find-LibreHardwareMonitorDll {
+    $envPath = [Environment]::GetEnvironmentVariable("TKAR_LIBREHARDWAREMONITOR_DLL")
+    if ($envPath -and (Test-Path $envPath)) {
+        return $envPath
+    }
+
+    $candidates = @(
+        "$env:ProgramFiles\LibreHardwareMonitor\LibreHardwareMonitorLib.dll",
+        "$env:ProgramFiles\Libre Hardware Monitor\LibreHardwareMonitorLib.dll",
+        "${env:ProgramFiles(x86)}\LibreHardwareMonitor\LibreHardwareMonitorLib.dll",
+        "${env:ProgramFiles(x86)}\Libre Hardware Monitor\LibreHardwareMonitorLib.dll",
+        "$env:LOCALAPPDATA\Programs\LibreHardwareMonitor\LibreHardwareMonitorLib.dll",
+        "$env:LOCALAPPDATA\Programs\Libre Hardware Monitor\LibreHardwareMonitorLib.dll"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    $wingetPackages = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+    if (Test-Path $wingetPackages) {
+        $match = Get-ChildItem -Path $wingetPackages -Recurse -Filter "LibreHardwareMonitorLib.dll" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*LibreHardwareMonitor.LibreHardwareMonitor*" } |
+            Select-Object -First 1
+        if ($match) {
+            return $match.FullName
+        }
+    }
+
+    return $null
+}
+
+function Test-LibreHardwareMonitor {
+    return [bool](Find-LibreHardwareMonitorDll)
+}
+
 function Get-PythonCommand {
     $candidates = @(
         @{ Exe = "py"; Args = @("-3") },
@@ -263,6 +302,22 @@ function Ensure-ExternalTools {
         }
         else {
             Write-Warn "HandBrake CLI installed, but HandBrakeCLI.exe was not found."
+        }
+    }
+
+    if ($SkipLibreHardwareMonitor) {
+        Write-Note "Skipping LibreHardwareMonitor install/check by request."
+    }
+    elseif (Test-LibreHardwareMonitor) {
+        Write-Info "LibreHardwareMonitor detected: $(Find-LibreHardwareMonitorDll)"
+    }
+    else {
+        Install-WingetPackage -Id "LibreHardwareMonitor.LibreHardwareMonitor" -Name "LibreHardwareMonitor"
+        if (Test-LibreHardwareMonitor) {
+            Write-Info "LibreHardwareMonitor detected after install: $(Find-LibreHardwareMonitorDll)"
+        }
+        else {
+            Write-Warn "LibreHardwareMonitor installed, but LibreHardwareMonitorLib.dll was not found."
         }
     }
 

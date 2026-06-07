@@ -6,6 +6,7 @@ import cpuinfo
 import time
 from typing import Dict, Any
 
+from ..integration.librehardwaremonitor import windows as librehardwaremonitor
 from ..integration.handbrake import windows as handbrake
 
 
@@ -71,7 +72,5 @@ def _get_storage() -> Dict:
     }
 
 
-def _get_gpu_info() -> Dict:
-    return {
-        "gpu": "Unknown - replace with lact.get_gpu_info() or WMI-based code"
-    }
+def _get_gpu_info():
+    return librehardwaremonitor.get_gpu_info()

@@ -85,9 +85,10 @@ python3 main.py
 - Python needs to be installed
 - MakeMKV needs to be installed
 - HandBrakeCLI needs to be installed
+- LibreHardwareMonitor is optional, but required for Windows GPU telemetry
 
 Or let the Windows installer set up Python, OpenSSL, HandBrake, MakeMKV,
-configuration files, and the local virtualenv:
+LibreHardwareMonitor GPU telemetry, configuration files, and the local virtualenv:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\installer\windows.ps1
